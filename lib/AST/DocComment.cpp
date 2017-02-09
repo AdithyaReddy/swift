@@ -22,8 +22,10 @@
 #include "swift/AST/PrettyStackTrace.h"
 #include "swift/AST/RawComment.h"
 #include "swift/Markup/Markup.h"
+#include "llvm/ADT/SetVector.h"
 
 using namespace swift;
+using llvm::SmallSetVector;
 
 void *DocComment::operator new(size_t Bytes, swift::markup::MarkupContext &MC,
                                unsigned Alignment) {
@@ -395,40 +397,61 @@ getAnyBaseClassDocComment(swift::markup::MarkupContext &MC,
 
 static Optional<DocComment *>
 getProtocolRequirementDocComment(swift::markup::MarkupContext &MC,
-                                 const ProtocolDecl *ProtoExt,
+                                 SmallVectorImpl<ProtocolDecl *> &ToVisitStack,
                                  const Decl *D) {
 
-  auto getSingleRequirementWithNonemptyDoc = [](const ProtocolDecl *P,
-                                                const ValueDecl *VD)
-    -> const ValueDecl * {
-      SmallVector<ValueDecl *, 2> Members;
-      P->lookupQualified(P->getDeclaredType(), VD->getFullName(),
-                         NLOptions::NL_ProtocolMembers,
-                         /*typeResolver=*/nullptr, Members);
-    SmallVector<const ValueDecl *, 1> ProtocolRequirements;
-    for (auto Member : Members)
-      if (!Member->isDefinition())
-        ProtocolRequirements.push_back(Member);
+  auto *VD = dyn_cast<ValueDecl>(D);
+  if (!VD) { return None; }
 
-    if (ProtocolRequirements.size() == 1) {
-      auto Requirement = ProtocolRequirements.front();
-      if (!Requirement->getRawComment().isEmpty())
-        return Requirement;
+  bool AlreadyFoundDocComment = false;
+  SmallPtrSet<ProtocolDecl *, 16> Visited;
+  SmallSetVector<ValueDecl *, 8> DisqualifiedRequirements;
+  SmallSetVector<ValueDecl *, 4> RequirementsWithDocs;
+
+  auto pushChildrenOf = [&] (ProtocolDecl *P) {
+    for (auto Inherited : P->getInheritedProtocols(/*resolver*/ nullptr)) {
+      ToVisitStack.push_back(Inherited);
     }
-
-    return nullptr;
   };
 
-  if (const auto *VD = dyn_cast<ValueDecl>(D)) {
-    SmallVector<const ValueDecl *, 4> RequirementsWithDocs;
-    if (auto Requirement = getSingleRequirementWithNonemptyDoc(ProtoExt, VD))
-      RequirementsWithDocs.push_back(Requirement);
+  while (!ToVisitStack.empty()) {
+    auto *ThisProto = ToVisitStack.pop_back_val();
 
-    if (RequirementsWithDocs.size() == 1)
-      return getSingleDocComment(MC, RequirementsWithDocs.front());
+    // Prevent circularity
+    if (Visited.count(ThisProto)) {
+      continue;
+    } else {
+      Visited.insert(ThisProto);
+    }
+
+    auto Result = ThisProto->lookupDirect(VD->getFullName());
+    if (!Result.empty()) {
+      auto *Requirement = Result.front();
+      if (!Requirement->isDefinition() &&
+          !Requirement->getRawComment().isEmpty()) {
+        if (AlreadyFoundDocComment) {
+          DisqualifiedRequirements.insert(Requirement);
+        } else {
+          AlreadyFoundDocComment = true;
+          RequirementsWithDocs.insert(Requirement);
+        }
+      }
+    }
+
+    pushChildrenOf(ThisProto);
   }
-  return None;
+
+  for (auto *Disqualified : DisqualifiedRequirements) {
+    RequirementsWithDocs.remove(Disqualified);
+  }
+
+  if (RequirementsWithDocs.empty() || RequirementsWithDocs.size() > 1) {
+    return None;
+  }
+
+  return getSingleDocComment(MC, *RequirementsWithDocs.begin());
 }
+
 
 Optional<DocComment *>
 swift::getCascadingDocComment(swift::markup::MarkupContext &MC, const Decl *D) {
@@ -438,13 +461,44 @@ swift::getCascadingDocComment(swift::markup::MarkupContext &MC, const Decl *D) {
 
   // If this refers to a class member, check to see if any
   // base classes have a doc comment and cascade it to here.
-  if (const auto *CD = D->getDeclContext()->getAsClassOrClassExtensionContext())
-    if (auto BaseClassDoc = getAnyBaseClassDocComment(MC, CD, D))
+  if (const auto *CD =
+      D->getDeclContext()->getAsClassOrClassExtensionContext()) {
+    if (auto BaseClassDoc = getAnyBaseClassDocComment(MC, CD, D)) {
       return BaseClassDoc;
+    }
+  }
 
-  if (const auto *PE = D->getDeclContext()->getAsProtocolExtensionContext())
-    if (auto ReqDoc = getProtocolRequirementDocComment(MC, PE, D))
+  // If this is a default implemenation in a protocol extension, try to
+  // find a suitable unique documentation comment in a requirement it
+  // is implementing.
+  if (auto *P = D->getDeclContext()->getAsProtocolExtensionContext()) {
+    SmallVector<ProtocolDecl *, 8> ToVisitStack;
+    for (auto Inherited : P->getInheritedProtocols(/*resolver*/ nullptr)) {
+      ToVisitStack.push_back(Inherited);
+    }
+
+    if (auto ReqDoc = getProtocolRequirementDocComment(MC, ToVisitStack, D)) {
       return ReqDoc;
+    }
+  }
+
+  // If this is some other declaration that satisfies a protocol requirement,
+  // try to find a unique requirement in the protocols to which the type
+  // conforms.
+  if (auto Nominal =
+        D->getDeclContext()->getAsNominalTypeOrNominalTypeExtensionContext()) {
+    SmallVector<ProtocolDecl *, 8> ToVisitStack;
+    for (auto &Inherited : Nominal->getInherited()) {
+      if (auto Proto =
+          dyn_cast<ProtocolDecl>(Inherited.getType()->getAnyNominal())) {
+        ToVisitStack.push_back(Proto);
+      }
+    }
+
+    if (auto ReqDoc = getProtocolRequirementDocComment(MC, ToVisitStack, D)) {
+      return ReqDoc;
+    }
+  }
 
   return None;
 }
