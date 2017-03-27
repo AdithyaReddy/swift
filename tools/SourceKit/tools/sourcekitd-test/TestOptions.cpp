@@ -182,6 +182,10 @@ bool TestOptions::parseArgs(llvm::ArrayRef<const char *> Args) {
       Col = 1;
       break;
 
+    case OPT_timings:
+      Timings = true;
+      break;
+
     case OPT_replace:
       ReplaceText = InputArg->getValue();
       break;
@@ -288,6 +292,12 @@ bool TestOptions::parseArgs(llvm::ArrayRef<const char *> Args) {
     llvm::errs()
         << "error: cannot use -async with interface-gen-open request\n";
     return true;
+  }
+
+  if (Timings) {
+    PrintRequest = false;
+    PrintResponseAsJSON = false;
+    PrintRawResponse = false;
   }
 
   return false;

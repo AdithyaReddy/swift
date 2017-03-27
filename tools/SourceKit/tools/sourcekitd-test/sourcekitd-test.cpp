@@ -25,6 +25,7 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/Signals.h"
 #include "llvm/Support/FileSystem.h"
+#include <chrono>
 #include <fstream>
 #include <unistd.h>
 #include <sys/param.h>
@@ -396,7 +397,7 @@ static bool readPopularAPIList(StringRef filename,
   return false;
 }
 
-static int handleJsonRequestPath(StringRef QueryPath) {
+static int handleJsonRequestPath(StringRef QueryPath, bool Print = true) {
   auto Buffer = getBufferForFilename(QueryPath)->getBuffer();
   char *Err = nullptr;
   auto Req = sourcekitd_request_create_from_yaml(Buffer.data(), &Err);
@@ -406,10 +407,24 @@ static int handleJsonRequestPath(StringRef QueryPath) {
     free(Err);
     return 1;
   }
-  sourcekitd_request_description_dump(Req);
+  if (Print) {
+    sourcekitd_request_description_dump(Req);
+  }
+  static size_t ReqCount = 0;
+  using namespace std::chrono;
+  auto t1 = high_resolution_clock::now();
   sourcekitd_response_t Resp = sourcekitd_send_request_sync(Req);
+  auto t2 = high_resolution_clock::now();
+  auto Span = duration_cast<nanoseconds>(t2 - t1);
+  if (ReqCount++ == 0) {
+    llvm::outs() << Span.count() << "\n";
+  } else {
+    llvm::outs() << "    " << Span.count() << "\n";
+  }
   auto Error = sourcekitd_response_is_error(Resp);
-  sourcekitd_response_description_dump_filedesc(Resp, STDOUT_FILENO);
+  if (Print) {
+    sourcekitd_response_description_dump_filedesc(Resp, STDOUT_FILENO);
+  }
   return Error ? 1 : 0;
 }
 
@@ -428,7 +443,7 @@ static int handleTestInvocation(ArrayRef<const char *> Args,
     return 1;
 
   if (!Opts.JsonRequestPath.empty())
-    return handleJsonRequestPath(Opts.JsonRequestPath);
+    return handleJsonRequestPath(Opts.JsonRequestPath, !Opts.Timings);
 
   if (Optargc < Args.size())
     Opts.CompilerArgs = Args.slice(Optargc+1);
@@ -864,13 +879,13 @@ static bool handleResponse(sourcekitd_response_t Resp, const TestOptions &Opts,
   if (IsError) {
     sourcekitd_response_description_dump(Resp);
 
-  } else if (Opts.PrintResponseAsJSON) {
+  } else if (Opts.PrintResponseAsJSON && !Opts.Timings) {
     sourcekitd_variant_t Info = sourcekitd_response_get_value(Resp);
     char *json = sourcekitd_variant_json_description_copy(Info);
     llvm::outs() << json << '\n';
     free(json);
 
-  } else if (Opts.PrintRawResponse) {
+  } else if (Opts.PrintRawResponse && !Opts.Timings) {
     sourcekitd_response_description_dump_filedesc(Resp, STDOUT_FILENO);
 
   } else {
@@ -889,11 +904,15 @@ static bool handleResponse(sourcekitd_response_t Resp, const TestOptions &Opts,
       break;
 
     case SourceKitRequest::DemangleNames:
-      printDemangleResults(sourcekitd_response_get_value(Resp), outs());
+      if (!Opts.Timings) {
+        printDemangleResults(sourcekitd_response_get_value(Resp), outs());
+      }
       break;
 
     case SourceKitRequest::MangleSimpleClasses:
-      printMangleResults(sourcekitd_response_get_value(Resp), outs());
+      if (!Opts.Timings) {
+        printMangleResults(sourcekitd_response_get_value(Resp), outs());
+      }
       break;
 
     case SourceKitRequest::ProtocolVersion:
@@ -904,41 +923,59 @@ static bool handleResponse(sourcekitd_response_t Resp, const TestOptions &Opts,
     case SourceKitRequest::CodeCompleteUpdate:
     case SourceKitRequest::CodeCompleteCacheOnDisk:
     case SourceKitRequest::CodeCompleteSetPopularAPI:
-      sourcekitd_response_description_dump_filedesc(Resp, STDOUT_FILENO);
+      if (!Opts.Timings) {
+        sourcekitd_response_description_dump_filedesc(Resp, STDOUT_FILENO);
+      }
       break;
 
     case SourceKitRequest::RelatedIdents:
-      printRelatedIdents(Info, SourceFile, llvm::outs());
+      if (!Opts.Timings) {
+        printRelatedIdents(Info, SourceFile, llvm::outs());
+      }
       break;
 
     case SourceKitRequest::CursorInfo:
-      printCursorInfo(Info, SourceFile, llvm::outs());
+      if (!Opts.Timings) {
+        printCursorInfo(Info, SourceFile, llvm::outs());
+      }
       break;
 
     case SourceKitRequest::NameTranslation:
-      printNameTranslationInfo(Info, llvm::outs());
+      if (!Opts.Timings) {
+        printNameTranslationInfo(Info, llvm::outs());
+      }
       break;
 
     case SourceKitRequest::RangeInfo:
-      printRangeInfo(Info, SourceFile, llvm::outs());
+      if (!Opts.Timings) {
+        printRangeInfo(Info, SourceFile, llvm::outs());
+      }
       break;
 
     case SourceKitRequest::DocInfo:
-      printDocInfo(Info, SourceFile);
+      if (!Opts.Timings) {
+        printDocInfo(Info, SourceFile);
+      }
       break;
 
     case SourceKitRequest::SemanticInfo:
       getSemanticInfo(Info, SourceFile);
-      printSemanticInfo();
+      if (!Opts.Timings) {
+        printSemanticInfo();
+      }
       break;
 
     case SourceKitRequest::InterfaceGen:
-      printInterfaceGen(Info, Opts.CheckInterfaceIsASCII);
+      if (!Opts.Timings) {
+        printInterfaceGen(Info, Opts.CheckInterfaceIsASCII);
+      }
       break;
 
     case SourceKitRequest::ExtractComment:
     case SourceKitRequest::MarkupToXML:
-      printNormalizedDocComment(Info);
+      if (!Opts.Timings) {
+        printNormalizedDocComment(Info);
+      }
       break;
 
     case SourceKitRequest::InterfaceGenOpen:
@@ -951,11 +988,15 @@ static bool handleResponse(sourcekitd_response_t Resp, const TestOptions &Opts,
       break;
 
     case SourceKitRequest::FindInterfaceDoc:
-      printFoundInterface(Info, llvm::outs());
+      if (!Opts.Timings) {
+        printFoundInterface(Info, llvm::outs());
+      }
       break;
 
     case SourceKitRequest::FindUSR:
-      printFoundUSR(Info, SourceBuf.get(), llvm::outs());
+      if (!Opts.Timings) {
+        printFoundUSR(Info, SourceBuf.get(), llvm::outs());
+      }
       break;
 
     case SourceKitRequest::SyntaxMap:
@@ -1028,7 +1069,9 @@ static bool handleResponse(sourcekitd_response_t Resp, const TestOptions &Opts,
         expandPlaceholders(SourceBuf.get(), llvm::outs());
         break;
       case SourceKitRequest::ModuleGroups:
-        printModuleGroupNames(Info, llvm::outs());
+        if (!Opts.Timings) {
+          printModuleGroupNames(Info, llvm::outs());
+        }
         break;
     }
   }

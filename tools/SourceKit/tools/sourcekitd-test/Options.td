@@ -102,3 +102,6 @@ def objc_name : Separate<["-"], "objc-name">,
 
 def objc_selector : Separate<["-"], "objc-selector">,
   HelpText<"Objective-C selector name to translate from">;
+
+def timings : Flag<["-"], "timings">,
+  HelpText<"Take timings around the request, don't print output">;
