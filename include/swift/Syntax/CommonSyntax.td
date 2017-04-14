@@ -1,14 +1,11 @@
-class Syntax {
-  bit Required = 1;
-}
+class Syntax;
 
-class SyntaxCollection<Syntax element> {
-  Syntax Element = element;
-}
-
-class Optional<Syntax node> : Syntax {
+class Layout<Syntax node> {
   Syntax Node = node;
-  let Required = 0;
+}
+
+class SyntaxCollection<Syntax element> : Syntax {
+  Syntax Element = element;
 }
 
 class Stmt : Syntax;
@@ -26,7 +23,12 @@ def AnyPattern : Pattern;
 class Type : Syntax;
 def AnyType : Type;
 
-class Token<string expectedText> : Syntax {
-  string ExpectedText = expectedText;
+class Attribute : Syntax;
+def AnyAttribute : Attribute;
+
+class Token<string spelling, string kind> : Syntax {
+  string Spelling = spelling;
+  string Kind = kind;
 }
+def AnyToken : Token<"", "">;
 

@@ -18,6 +18,7 @@
 
 include "CommonSyntax.td"
 include "TokenSyntax.td"
+include "AttributeSyntax.td"
 include "StmtSyntax.td"
 include "DeclSyntax.td"
 include "ExprSyntax.td"
