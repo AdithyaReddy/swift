@@ -1,14 +1,20 @@
 add_subdirectory(TableGen)
 
-set(syntax_gen_impl_output_dir "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_CFG_INTDIR}")
-swift_add_syntax_generated_source(DeclSyntax.cpp
-  OUTPUT_DIR ${syntax_gen_impl_output_dir}
-  ACTION implementation
-  CATEGORY Decl
-  TARGET_LANGUAGE c++)
+include(SwiftSyntaxLibrary)
+
+set(generated_sources)
+foreach(category ${SYNTAX_GEN_CATEGORIES})
+  set(syntax_gen_output_dir "${CMAKE_CURRENT_BINARY_DIR}")
+  swift_add_syntax_generated_source("${category}.cpp"
+    OUTPUT_DIR ${syntax_gen_output_dir}
+    ACTION implementation
+    CATEGORY ${category}
+    TARGET_LANGUAGE c++)
+  list(APPEND generated_sources "${syntax_gen_output_dir}/${category}.cpp")
+endforeach()
 
 add_swift_library(swiftSyntax STATIC
-  "${syntax_gen_impl_output_dir}/DeclSyntax.cpp"
+  ${generated_sources}
   Format.cpp
   TokenSyntax.cpp
   LegacyASTTransformer.cpp

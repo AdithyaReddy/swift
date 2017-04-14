@@ -1,6 +1,6 @@
 include(SwiftAddCustomCommandTarget)
 
-function(swift_add_syntax_generated_source filename)
+function(swift_add_syntax_generated_source category)
   cmake_parse_arguments(
     SYNTAX_GEN # prefix
     "" # options
@@ -11,6 +11,17 @@ function(swift_add_syntax_generated_source filename)
   precondition(SYNTAX_GEN_ACTION "Action is required")
   precondition(SYNTAX_GEN_CATEGORY "Category is required")
   precondition(SYNTAX_GEN_TARGET_LANGUAGE "Target language is required")
+
+  set(filename ${category})
+  if (category IN_LIST SYNTAX_GEN_SYNTAX_CATEGORIES)
+    set(filename "${filename}Syntax")
+  endif()
+
+  if (${SYNTAX_GEN_ACTION} STREQUAL "interface")
+    set(filename "${filename}.h")
+  elseif (${SYNTAX_GEN_ACTION} STREQUAL "implementation")
+    set(filename "${filename}.cpp")
+  endif()
 
   set(syntax_tblgen_tool "${CMAKE_BINARY_DIR}/${CMAKE_CFG_INTDIR}/bin/swift-syntax-tblgen")
   set(syntax_gen_output_file "${SYNTAX_GEN_OUTPUT_DIR}/${filename}")

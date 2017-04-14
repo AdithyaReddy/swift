@@ -1,7 +1,8 @@
-set(syntax_gen_categories "DeclSyntax;StmtSyntax;ExprSyntax;TypeSyntax;PatternSyntax;SyntaxFactory;SyntaxRewriter")
-foreach(category ${syntax_gen_categories})
+include(SwiftSyntaxLibrary)
+
+foreach(category ${SYNTAX_GEN_CATEGORIES})
   set(syntax_gen_impl_output_dir "${CMAKE_CURRENT_BINARY_DIR}")
-  swift_add_syntax_generated_source("${category}.h"
+  swift_add_syntax_generated_source("${category}"
     OUTPUT_DIR ${syntax_gen_impl_output_dir}
     ACTION interface
     CATEGORY ${category}
