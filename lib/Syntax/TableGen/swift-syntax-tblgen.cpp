@@ -32,6 +32,7 @@ enum class TargetLanguage {
 };
 
 RecordKeeper *AllRecords;
+SmallPtrSet<const Record *, 8> SyntaxCategories;
 
 namespace options {
 static cl::opt<ActionType> Action(
@@ -64,9 +65,9 @@ static cl::opt<std::string> Category(
 /// Returns true if the record type is a subclass of Syntax.
 /// Used to filter out values in a record that tablegen automatically inserts, like NAME,
 /// or auxiliary fields that we have added, like IsRequired.
-static bool isSyntax(const RecTy *Ty) {
+static bool is(const RecTy *Ty, StringRef TypeName) {
   if (auto RecordTy = dyn_cast<RecordRecTy>(Ty)) {
-    if (RecordTy->getRecord()->isSubClassOf(AllRecords->getClass("Syntax"))) {
+    if (RecordTy->getAsString() == TypeName || RecordTy->getRecord()->isSubClassOf(AllRecords->getClass(TypeName))) {
       return RecordTy;
     }
   }
@@ -74,22 +75,53 @@ static bool isSyntax(const RecTy *Ty) {
 }
 
 static bool isToken(const RecTy *Ty) {
-  if (auto RecordTy = dyn_cast<RecordRecTy>(Ty)) {
-    return RecordTy->getAsString() == "Token" || RecordTy->getRecord()->isSubClassOf(AllRecords->getClass("Token"));
-  }
-  return false;
+  return is(Ty, "Token");
 }
 
 static bool isIdentifier(const RecTy *Ty) {
-  if (auto RecordTy = dyn_cast<RecordRecTy>(Ty)) {
-    return RecordTy->getAsString() == "Identifier";
+  return is(Ty, "Identifier");
+}
+
+static bool isLayout(const RecTy *Ty) {
+  return is(Ty, "Layout");
+}
+
+static const Record *getLayoutNodeRecord(const Record *Rec) {
+  auto NodeField = Rec->getValue("Node");
+  auto NodeValue = cast<DefInit>(NodeField->getValue());
+  return NodeValue->getDef();
+}
+
+static const Record *getLayoutNodeRecord(const RecordVal Child) {
+  assert(isLayout(Child.getType()));
+  auto RHS = cast<DefInit>(Child.getValue());
+  auto NodeDef = RHS->getDef();
+  return getLayoutNodeRecord(NodeDef);
+}
+
+static llvm::Optional<const Record *>
+getSyntaxCategory(const Record *Def) {
+  for (const auto Super : Def->getSuperClasses()) {
+    if (SyntaxCategories.count(Super.first)) {
+      return Super.first;
+    }
   }
-  return false;
+  return None;
+}
+
+static const RecordRecTy *getLayoutNodeType(const RecordVal Child) {
+  assert(isLayout(Child.getType()));
+  auto RHS = cast<DefInit>(Child.getValue());
+  auto NodeDef = RHS->getDef();
+  auto NodeField = NodeDef->getValue("Node");
+  auto NodeValue = cast<DefInit>(NodeField->getValue());
+  auto NodeType = NodeValue->getType();
+  return cast<RecordRecTy>(NodeType);
 }
 
 static StringRef getTokenSpelling(const RecordVal Value) {
-  assert(isToken(Value.getType()));
-  auto TokenRec = AllRecords->getDef(Value.getValue()->getAsString());
+  assert(isLayout(Value.getType()));
+  auto TokenRec = getLayoutNodeRecord(Value);
   for (const auto Field : TokenRec->getValues()) {
     if (Field.getName() == "Spelling") {
       return Field.getValue()->getAsUnquotedString();
@@ -98,31 +130,16 @@ static StringRef getTokenSpelling(const RecordVal Value) {
   return StringRef();
 }
 
-static std::string getMissingSyntaxKind(const RecordRecTy *RecTy) {
-  return llvm::StringSwitch<std::string>(RecTy->getAsString())
+static std::string getMissingSyntaxKind(const RecordVal Child) {
+  auto Node = getLayoutNodeRecord(Child);
+  auto Category = getSyntaxCategory(Node).getValue();
+  return llvm::StringSwitch<std::string>(Category->getName())
     .Case("Decl", "MissingDecl")
     .Case("Expr", "MissingExpr")
     .Case("Stmt", "MissingStmt")
     .Case("Type", "MissingType")
     .Case("Pattern", "MissingPattern")
-    .Default("");
-
-  for (const auto Super : RecTy->getRecord()->getSuperClasses()) {
-    if (Super.first->getName() == "Syntax") {
-      continue;
-    }
-    auto MissingKind = llvm::StringSwitch<std::string>(Super.first->getName())
-    .Case("Decl", "MissingDecl")
-    .Case("Expr", "MissingExpr")
-    .Case("Stmt", "MissingStmt")
-    .Case("Type", "MissingType")
-    .Case("Pattern", "MissingPattern")
-    .Default("");
-    if (!MissingKind.empty()) {
-      return MissingKind;
-    }
-  }
-  llvm_unreachable("Syntax kind didn't have a Missing kind??");
+    .Case("SyntaxCollection", "MissingSyntaxCollection");
 }
 
 static Category getCategory() {
@@ -141,7 +158,7 @@ static std::vector<RecordVal> getChildrenOf(const Record *Node) {
   std::vector<RecordVal> Children;
 
   for (const auto Child : Node->getValues()) {
-    if (!isSyntax(Child.getType())) {
+    if (!isLayout(Child.getType())) {
       continue;
     }
     Children.push_back(Child);
@@ -153,9 +170,10 @@ static std::vector<RecordVal> getChildrenOf(const Record *Node) {
 static void printTokenAssertion(std::string VariableName,
                                 const RecordVal Value,
                                 raw_ostream &OS) {
-  auto Ty = Value.getType();
+  assert(isLayout(Value.getType()));
+  auto Ty = getLayoutNodeType(Value);
   assert(isToken(Ty));
-  auto TokenRec = AllRecords->getDef(Value.getValue()->getAsString());
+  auto TokenRec = getLayoutNodeRecord(Value);
   auto Kind = TokenRec->getValueAsString("Kind");
   if (isIdentifier(Ty)) {
     OS << "assert(" << VariableName << "->getTokenKind() == " << Kind << ");\n";
@@ -248,13 +266,13 @@ static bool printSyntaxInterfaces(raw_ostream &OS) {
 static bool printSyntaxImplementation(const Record *Node,
                                       raw_ostream &OS) {
   auto Kind = Node->getName();
-  auto ClassName = std::string(Kind) + "Syntax";
+  auto ClassName = std::string(Kind);
   auto DataClassName = ClassName + "Data";
 
   for (auto Child : getChildrenOf(Node)) {
     auto ChildName = Child.getName();
-    auto ChildType = cast<RecordRecTy>(Child.getType());
-    auto ChildTypeName = ChildType->getAsString() + "Syntax";
+    auto ChildType = getLayoutNodeType(Child);
+    auto ChildTypeName = ChildType->getAsString();
     auto OptionalChildTypeName = "llvm::Optional<" + ChildTypeName + ">";
 
     // Getter
@@ -286,11 +304,10 @@ static bool printSyntaxImplementation(const Record *Node,
   return false;
 }
 
-static bool printSyntaxDataImplementation(const Record *Node,
-                                          raw_ostream &OS) {
+static bool printSyntaxDataImplementation(const Record *Node, raw_ostream &OS) {
   auto Kind = Node->getName();
-  auto ClassName = std::string(Kind) + "Syntax";
-  auto SuperclassName = Node->getSuperClasses().back().first->getName() + "Syntax";
+  auto ClassName = std::string(Kind);
+  auto SuperclassName = Node->getSuperClasses().back().first->getName();
   auto DataClassName = ClassName + "Data";
   auto DataSuperclassName = SuperclassName + "Data";
 
@@ -301,8 +318,8 @@ static bool printSyntaxDataImplementation(const Record *Node,
   "  assert(Raw->Layout.size() == " << getChildrenOf(Node).size() << ");\n";
   for (const auto Child : getChildrenOf(Node)) {
     auto ChildName = Child.getName();
-    auto ChildType = cast<RecordRecTy>(Child.getType());
-    auto ChildTypeName = ChildType->getAsString() + "Syntax";
+    auto ChildType = getLayoutNodeType(Child);
+    auto ChildTypeName = ChildType->getAsString();
     auto ChildVariable = "Raw->getChild(Cursor::" + ChildName + ")";
     if (isToken(ChildType)) {
       printTokenAssertion(ChildVariable.str(), Child, OS);
@@ -326,18 +343,19 @@ static bool printSyntaxDataImplementation(const Record *Node,
   "  return make(RawSyntax::make(SyntaxKind::" << Kind << ",\n"
   "  {\n";
   for (const auto Child : getChildrenOf(Node)) {
-    if (isToken(Child.getType())) {
-      auto ChildRec = AllRecords->getDef(Child.getValue()->getAsString());
+    auto ChildType = getLayoutNodeType(Child);
+    if (isToken(ChildType)) {
+      auto ChildRec = getLayoutNodeRecord(Child);
       auto TokenKind = ChildRec->getValueAsString("Kind");
       auto TokenSpelling = ChildRec->getValueAsString("Spelling");
-      OS << "TokenSyntax::missingToken(" << TokenKind << ", " << TokenSpelling << "),\n";
+      OS << "    TokenSyntax::missingToken(tok::" << TokenKind << ", \"" << TokenSpelling << "\"),\n";
     } else {
-      auto ChildKind = getMissingSyntaxKind(cast<RecordRecTy>(Child.getType()));
-      OS << "RawSyntax::missing(SyntaxKind::" << ChildKind << "),\n";
+      auto ChildKind = getMissingSyntaxKind(Child);
+      OS << "    RawSyntax::missing(SyntaxKind::" << ChildKind << "),\n";
     }
   }
-  OS << "    },\n"
-  "    SourcePresence::Present));\n"
+  OS << "  },\n"
+  "  SourcePresence::Present));\n"
   "}\n\n";
 
   return false;
@@ -421,6 +439,13 @@ static bool genImplementation(raw_ostream &OS) {
 
 static bool SyntaxTableGenMain(raw_ostream &OS, RecordKeeper &Records) {
   AllRecords = &Records;
+  SyntaxCategories.insert(AllRecords->getClass("Decl"));
+  SyntaxCategories.insert(AllRecords->getClass("Stmt"));
+  SyntaxCategories.insert(AllRecords->getClass("Expr"));
+  SyntaxCategories.insert(AllRecords->getClass("Type"));
+  SyntaxCategories.insert(AllRecords->getClass("Pattern"));
+  SyntaxCategories.insert(AllRecords->getClass("Token"));
+  SyntaxCategories.insert(AllRecords->getClass("SyntaxCollection"));
   switch (options::Action) {
     case ActionType::None:
       llvm::errs() << "action required\n";
