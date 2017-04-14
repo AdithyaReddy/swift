@@ -23,9 +23,6 @@ def AnyPattern : Pattern;
 class Type : Syntax;
 def AnyType : Type;
 
-class Attribute : Syntax;
-def AnyAttribute : Attribute;
-
 class Token<string spelling, string kind> : Syntax {
   string Spelling = spelling;
   string Kind = kind;

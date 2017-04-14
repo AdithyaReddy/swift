@@ -1,6 +1,6 @@
 
 def TypeAnnotationSyntax : Syntax {
-  Layout Attributes = Layout<SyntaxCollection<AnyAttribute>>;
+  Layout Attributes = Layout<SyntaxCollection<AttributeSyntax>>;
   Layout InOut = Layout<InoutToken>;
   Layout Type = Layout<AnyType>;
 }
@@ -20,7 +20,7 @@ def TypeIdentifierSyntax : Syntax {
 def TupleTypeElementSyntax : Syntax {
   Layout Label = Layout<IdentifierToken>;
   Layout Colon = Layout<ColonToken>;
-  Layout TypeAttributes = Layout<SyntaxCollection<AnyAttribute>>;
+  Layout TypeAttributes = Layout<SyntaxCollection<AttributeSyntax>>;
   Layout InOut = Layout<InoutToken>;
   Layout Type = Layout<AnyType>;
   Layout Comma = Layout<CommaToken>;
@@ -36,13 +36,13 @@ def FunctionTypeArgumentSyntax : Syntax {
   Layout ExternalParameterName = Layout<IdentifierToken>;
   Layout LocalParameterName = Layout<IdentifierToken>;
   Layout Colon = Layout<ColonToken>;
-  Layout TypeAttributes = Layout<SyntaxCollection<AnyAttribute>>;
+  Layout TypeAttributes = Layout<SyntaxCollection<AttributeSyntax>>;
   Layout Inout = Layout<InoutToken>;
   Layout Type = Layout<AnyType>;
 }
 def FunctionTypeArgumentListSyntax : SyntaxCollection<FunctionTypeArgumentSyntax>;
 def FunctionTypeSyntax : Type {
-  Layout TypeAttributes = Layout<SyntaxCollection<AnyAttribute>>;
+  Layout TypeAttributes = Layout<SyntaxCollection<AttributeSyntax>>;
   Layout LeftArgumentsParen = Layout<LeftParenToken>;
   Layout ArgumentList = Layout<FunctionTypeArgumentListSyntax>;
   Layout RightArgumentsParen = Layout<RightParenToken>;
@@ -57,7 +57,7 @@ def ArrayTypeSyntax : Type {
   Layout RightBracket = Layout<RightSquareToken>;
 }
 
-def DictionaryType : Type {
+def DictionaryTypeSyntax : Type {
   Layout LeftSquare = Layout<LeftSquareToken>;
   Layout KeyType = Layout<AnyType>;
   Layout Colon = Layout<ColonToken>;
@@ -65,12 +65,12 @@ def DictionaryType : Type {
   Layout RightSquare = Layout<RightSquareToken>;
 }
 
-def OptionalType : Type {
+def OptionalTypeSyntax : Type {
   Layout ValueType = Layout<AnyType>;
   Layout QuestionMark = Layout<QuestionMarkPostfixToken>;
 }
 
-def ImplicityUnwrappedOptionalType : Type {
+def ImplicityUnwrappedOptionalTypeSyntax : Type {
   Layout ValueType = Layout<AnyType>;
   Layout ExclamationMark = Layout<ExclamationMarkToken>;
 }
@@ -80,12 +80,12 @@ def ProtocolCompositionElementSyntax : Syntax {
   Layout Ampersand = Layout<AmpersandToken>;
 }
 
-def ProtocolCompositionType : SyntaxCollection<ProtocolCompositionElementSyntax>;
+def ProtocolCompositionTypeSyntax : SyntaxCollection<ProtocolCompositionElementSyntax>;
 
-def MetatypeType : Type {
+def MetatypeTypeSyntax : Type {
   Layout TypeValue = Layout<AnyType>;
   Layout Period = Layout<PeriodToken>;
   // FIXME: Add set of allowable values to assert
-  Layout TypeOrProtocol = Layout<Identifier>;
+  Layout TypeOrProtocol = Layout<IdentifierToken>;
 }
 

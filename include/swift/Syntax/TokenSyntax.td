@@ -4,6 +4,7 @@ def WhileToken : Keyword<"while", "kw_while">;
 def InoutToken : Keyword<"inout", "kw_inout">;
 
 def ArrowToken: Token<"->", "arrow">;
+def AtSignToken: Token<"@", "at_sign">;
 def ColonToken: Token<":", "colon">;
 def CommaToken: Token<",", "comma">;
 def PeriodToken: Token<".", "period">;
