@@ -31,6 +31,8 @@ enum class TargetLanguage {
   CPlusPlus,
 };
 
+RecordKeeper *AllRecords;
+
 namespace options {
 static cl::opt<ActionType> Action(
   cl::desc("Action to perform: "),
@@ -62,13 +64,65 @@ static cl::opt<std::string> Category(
 /// Returns true if the record type is a subclass of Syntax.
 /// Used to filter out values in a record that tablegen automatically inserts, like NAME,
 /// or auxiliary fields that we have added, like IsRequired.
-static const RecordRecTy *getIfSyntaxType(const RecTy *Ty, const RecordKeeper &Records) {
+static bool isSyntax(const RecTy *Ty) {
   if (auto RecordTy = dyn_cast<RecordRecTy>(Ty)) {
-    if (RecordTy->getRecord()->isSubClassOf(Records.getClass("Syntax"))) {
+    if (RecordTy->getRecord()->isSubClassOf(AllRecords->getClass("Syntax"))) {
       return RecordTy;
     }
   }
   return nullptr;
+}
+
+static bool isToken(const RecTy *Ty) {
+  if (auto RecordTy = dyn_cast<RecordRecTy>(Ty)) {
+    return RecordTy->getAsString() == "Token" || RecordTy->getRecord()->isSubClassOf(AllRecords->getClass("Token"));
+  }
+  return false;
+}
+
+static bool isIdentifier(const RecTy *Ty) {
+  if (auto RecordTy = dyn_cast<RecordRecTy>(Ty)) {
+    return RecordTy->getAsString() == "Identifier";
+  }
+  return false;
+}
+
+static StringRef getTokenSpelling(const RecordVal Value) {
+  assert(isToken(Value.getType()));
+  auto TokenRec = AllRecords->getDef(Value.getValue()->getAsString());
+  for (const auto Field : TokenRec->getValues()) {
+    if (Field.getName() == "Spelling") {
+      return Field.getValue()->getAsUnquotedString();
+    }
+  }
+  return StringRef();
+}
+
+static std::string getMissingSyntaxKind(const RecordRecTy *RecTy) {
+  return llvm::StringSwitch<std::string>(RecTy->getAsString())
+    .Case("Decl", "MissingDecl")
+    .Case("Expr", "MissingExpr")
+    .Case("Stmt", "MissingStmt")
+    .Case("Type", "MissingType")
+    .Case("Pattern", "MissingPattern")
+    .Default("");
+
+  for (const auto Super : RecTy->getRecord()->getSuperClasses()) {
+    if (Super.first->getName() == "Syntax") {
+      continue;
+    }
+    auto MissingKind = llvm::StringSwitch<std::string>(Super.first->getName())
+    .Case("Decl", "MissingDecl")
+    .Case("Expr", "MissingExpr")
+    .Case("Stmt", "MissingStmt")
+    .Case("Type", "MissingType")
+    .Case("Pattern", "MissingPattern")
+    .Default("");
+    if (!MissingKind.empty()) {
+      return MissingKind;
+    }
+  }
+  llvm_unreachable("Syntax kind didn't have a Missing kind??");
 }
 
 static Category getCategory() {
@@ -83,11 +137,38 @@ static Category getCategory() {
   .Default(Category::Unknown);
 }
 
+static std::vector<RecordVal> getChildrenOf(const Record *Node) {
+  std::vector<RecordVal> Children;
+
+  for (const auto Child : Node->getValues()) {
+    if (!isSyntax(Child.getType())) {
+      continue;
+    }
+    Children.push_back(Child);
+  }
+
+  return Children;
+}
+
+static void printTokenAssertion(std::string VariableName,
+                                const RecordVal Value,
+                                raw_ostream &OS) {
+  auto Ty = Value.getType();
+  assert(isToken(Ty));
+  auto TokenRec = AllRecords->getDef(Value.getValue()->getAsString());
+  auto Kind = TokenRec->getValueAsString("Kind");
+  if (isIdentifier(Ty)) {
+    OS << "assert(" << VariableName << "->getTokenKind() == " << Kind << ");\n";
+  } else {
+    OS << "  syntax_assert_token_is(" << VariableName << ", " << Kind << ", \"" << getTokenSpelling(Value) << "\");\n";
+  }
+}
+
 #pragma mark - Syntax
 
-static bool printSyntaxInterface(const Record *Rec,
-                                 raw_ostream &OS, const RecordKeeper &Records) {
-  auto ClassName = std::string(Rec->getName()) + "Syntax";
+static bool printSyntaxInterface(const Record *Node, raw_ostream &OS) {
+  auto ClassName = std::string(Node->getName()) + "Syntax";
+  auto SuperclassName = Node->getSuperClasses().back().first->getName() + "Syntax";
   auto DataClassName = ClassName + "Data";
 
   OS << "class " << ClassName << " final : public Syntax {\n"
@@ -98,28 +179,24 @@ static bool printSyntaxInterface(const Record *Rec,
   "  using DataType = " << DataClassName << ";\n"
   "\n"
   "  enum class Cursor : CursorIndex {\n";
-  for (const auto Child : Rec->getValues()) {
-    if (getIfSyntaxType(Child.getType(), Records)) {
-      OS << "    " << Child.getName() << ",\n";
-    }
+  for (const auto Child : getChildrenOf(Node)) {
+    OS << "    " << Child.getName() << ",\n";
   }
   OS << "  };\n";
 
   OS <<
-  "  " << ClassName << "(RC<SyntaxData> Root, const " << DataClassName << "*Data);\n"
+  "  " << ClassName << "(RC<SyntaxData> Root, const " << DataClassName << "*Data)\n"
+  "    : " << SuperclassName << "(Root, Data) {}\n"
   "public:\n";
-  for (const auto Child : Rec->getValues()) {
-
-    auto ChildType = getIfSyntaxType(Child.getType(), Records);
-    if (ChildType == nullptr) {
-      continue;
-    }
+  for (const auto Child : getChildrenOf(Node)) {
+    auto ChildType = cast<RecordRecTy>(Child.getType());
     auto ChildTypeName = ChildType->getAsString() + "Syntax";
-    if (ChildType->getRecord() == Records.getClass("Token")) {
+    auto OptionalChildTypeName = "llvm::Optional<" + ChildTypeName + ">";
+    if (ChildType->getRecord() == AllRecords->getClass("Token")) {
       ChildTypeName = "RC<" + ChildTypeName + ">";
     }
 
-    OS << "  " << ChildTypeName << " get" << Child.getName() << "() const;\n";
+    OS << "  " << OptionalChildTypeName << " get" << Child.getName() << "() const;\n";
     OS << "  " << ClassName << " with" << Child.getName() << "(" << ChildTypeName << " New" << Child.getName() << ") const;\n\n";
   }
   OS <<
@@ -131,10 +208,9 @@ static bool printSyntaxInterface(const Record *Rec,
   return false;
 }
 
-static bool printSyntaxDataInterface(const Record *Rec,
-                                     raw_ostream &OS,
-                                     const RecordKeeper &Records) {
-  auto Kind = Rec->getName();
+static bool printSyntaxDataInterface(const Record *Node,
+                                     raw_ostream &OS) {
+  auto Kind = Node->getName();
   auto ClassName = std::string(Kind) + "Syntax";
   auto DataClassName = ClassName + "Data";
 
@@ -155,44 +231,130 @@ static bool printSyntaxDataInterface(const Record *Rec,
   return false;
 }
 
-static bool printSyntaxInterfaces(raw_ostream &OS, const RecordKeeper &Records) {
-  auto Nodes = Records.getAllDerivedDefinitions(options::Category);
+static bool printSyntaxInterfaces(raw_ostream &OS) {
+  auto Nodes = AllRecords->getAllDerivedDefinitions(options::Category);
   auto Any = std::string { "Any" } + options::Category;
   for (const auto *Node : Nodes) {
     if (Node->getName() == Any) {
       continue;
     }
-    printSyntaxInterface(Node, OS, Records);
-    printSyntaxDataInterface(Node, OS, Records);
+    printSyntaxInterface(Node, OS);
+    printSyntaxDataInterface(Node, OS);
   }
 
   return false;
 }
 
-static bool printSyntaxImplementation(const Record *Rec,
-                                      raw_ostream &OS,
-                                      const RecordKeeper &Records) {
-  // TODO
+static bool printSyntaxImplementation(const Record *Node,
+                                      raw_ostream &OS) {
+  auto Kind = Node->getName();
+  auto ClassName = std::string(Kind) + "Syntax";
+  auto DataClassName = ClassName + "Data";
+
+  for (auto Child : getChildrenOf(Node)) {
+    auto ChildName = Child.getName();
+    auto ChildType = cast<RecordRecTy>(Child.getType());
+    auto ChildTypeName = ChildType->getAsString() + "Syntax";
+    auto OptionalChildTypeName = "llvm::Optional<" + ChildTypeName + ">";
+
+    // Getter
+    OS << OptionalChildTypeName << "\n" <<
+    ClassName << "::get" << ChildName << "() const {\n"
+    "  auto RawChild = getRaw()->getChild(Cursor::" << ChildName << ";\n"
+    "  if (RawChild->isMissing()) {\n"
+    "    return llvm::None;\n"
+    "  }\n"
+    "  auto *MyData = getUnsafeData<" << ClassName << ">();\n"
+    "  auto &ChildPtr = *reinterpret_cast<std::atomic<uintptr_t>*>(\n"
+    "    &MyData->Cached" << ChildName << ");\n"
+    "  SyntaxData::realizeSyntaxNode<" << ChildTypeName << ">(ChildPtr, RawChild, MyData, cursorIndex(Cursor::" << ChildName << "));\n"
+    "  return " << ClassName << "{ Root, MyData->Cached" << ChildName << ".get() };\n"
+    "}\n\n";
+
+    // Setter
+    auto NewChildArg = "New" + ChildName;
+    OS << ClassName << "\n" << ClassName << "::with" << ChildName << "(" << ChildTypeName << " " << NewChildArg << ") const {\n";
+    if (isToken(ChildType)) {
+      printTokenAssertion(NewChildArg.str(), Child, OS);
+      OS << "  return Data->replaceChild<" << ClassName << ">(" << NewChildArg << ", " << "Cursor::" << ChildName << ");\n";
+    } else {
+      OS << "  return Data->replaceChild<" << ClassName << ">(" << NewChildArg << "->getRaw(), " << "Cursor::" << ChildName << ");\n";
+    }
+    OS << "}\n\n";
+  }
+
   return false;
 }
 
-static bool printSyntaxDataImplementation(const Record *Rec,
-                                          raw_ostream &OS,
-                                          const RecordKeeper &Records) {
-  // TODO
+static bool printSyntaxDataImplementation(const Record *Node,
+                                          raw_ostream &OS) {
+  auto Kind = Node->getName();
+  auto ClassName = std::string(Kind) + "Syntax";
+  auto SuperclassName = Node->getSuperClasses().back().first->getName() + "Syntax";
+  auto DataClassName = ClassName + "Data";
+  auto DataSuperclassName = SuperclassName + "Data";
+
+  // Constructor
+  OS << DataClassName << "::" << DataClassName << "(RC<RawSyntax> Raw, const SyntaxData *Data, const CursorIndex IndexInParent)\n"
+  "  : " << DataSuperclassName << "(Raw, Data, IndexInParent) {\n"
+  "  assert(Raw->getKind() == SyntaxKind::" << Kind << ");\n"
+  "  assert(Raw->Layout.size() == " << getChildrenOf(Node).size() << ");\n";
+  for (const auto Child : getChildrenOf(Node)) {
+    auto ChildName = Child.getName();
+    auto ChildType = cast<RecordRecTy>(Child.getType());
+    auto ChildTypeName = ChildType->getAsString() + "Syntax";
+    auto ChildVariable = "Raw->getChild(Cursor::" + ChildName + ")";
+    if (isToken(ChildType)) {
+      printTokenAssertion(ChildVariable.str(), Child, OS);
+    } else {
+      OS << "  assert(" << ChildVariable << "->getKind() == SyntaxKind::" << ChildTypeName << ");\n";
+    }
+  }
+  OS << "}\n\n";
+
+  // make
+  OS << "RC<" << DataClassName << ">\n" <<
+  DataClassName << "::make(RC<RawSyntax> Raw, const SyntaxData *Parent, const CursorIndex IndexInParent) {\n"
+  "  return RC<" << DataClassName << "> {\n"
+  "    new " << DataClassName << " { Raw, Parent, IndexInParent }\n"
+  "  };\n"
+  "}\n\n";
+
+  // makeBlank
+  OS << "RC<" << DataClassName << ">\n" <<
+  DataClassName << "::makeBlank() {\n"
+  "  return make(RawSyntax::make(SyntaxKind::" << Kind << ",\n"
+  "  {\n";
+  for (const auto Child : getChildrenOf(Node)) {
+    if (isToken(Child.getType())) {
+      auto ChildRec = AllRecords->getDef(Child.getValue()->getAsString());
+      auto TokenKind = ChildRec->getValueAsString("Kind");
+      auto TokenSpelling = ChildRec->getValueAsString("Spelling");
+      OS << "TokenSyntax::missingToken(" << TokenKind << ", " << TokenSpelling << "),\n";
+    } else {
+      auto ChildKind = getMissingSyntaxKind(cast<RecordRecTy>(Child.getType()));
+      OS << "RawSyntax::missing(SyntaxKind::" << ChildKind << "),\n";
+    }
+  }
+  OS << "    },\n"
+  "    SourcePresence::Present));\n"
+  "}\n\n";
+
   return false;
 }
 
-static bool printSyntaxImplementations(raw_ostream &OS,
-                                       const RecordKeeper &Records) {
-  auto Nodes = Records.getAllDerivedDefinitions(options::Category);
+static bool printSyntaxImplementations(raw_ostream &OS) {
+  auto Nodes = AllRecords->getAllDerivedDefinitions(options::Category);
   auto Any = std::string { "Any" } + options::Category;
   for (const auto *Node : Nodes) {
     if (Node->getName() == Any) {
       continue;
     }
-    printSyntaxImplementation(Node, OS, Records);
-    printSyntaxDataImplementation(Node, OS, Records);
+
+    OS << "#pragma mark - " << Node->getName() << " API\n\n";
+    printSyntaxImplementation(Node, OS);
+    OS << "#pragma mark - " << Node->getName() << " Data\n\n";
+    printSyntaxDataImplementation(Node, OS);
   }
 
   return false;
@@ -200,77 +362,74 @@ static bool printSyntaxImplementations(raw_ostream &OS,
 
 #pragma mark - SyntaxFactory
 
-static bool printSyntaxFactoryInterface(raw_ostream &OS,
-                                        const RecordKeeper &Record) {
+static bool printSyntaxFactoryInterface(raw_ostream &OS) {
   // TODO
   return false;
 }
 
 
-static bool printSyntaxFactoryImplementation(raw_ostream &OS,
-                                             const RecordKeeper &Records) {
+static bool printSyntaxFactoryImplementation(raw_ostream &OS) {
   // TODO
   return false;
 }
 
 #pragma mark - SyntaxRewriter
 
-static bool printSyntaxRewriterInterface(raw_ostream &OS,
-                                         const RecordKeeper &Records) {
+static bool printSyntaxRewriterInterface(raw_ostream &OS) {
   // TODO
   return false;
 }
 
-static bool printSyntaxRewriterImplementation(raw_ostream &OS,
-                                              const RecordKeeper &Records) {
+static bool printSyntaxRewriterImplementation(raw_ostream &OS) {
   // TODO
   return false;
 }
 
-static bool genInterface(raw_ostream &OS, RecordKeeper &Records) {
+static bool genInterface(raw_ostream &OS) {
   switch (getCategory()) {
     case Category::Decl:
     case Category::Expr:
     case Category::Stmt:
     case Category::Type:
     case Category::Pattern:
-      return printSyntaxInterfaces(OS, Records);
+      return printSyntaxInterfaces(OS);
     case Category::SyntaxFactory:
-      return printSyntaxFactoryInterface(OS, Records);
+      return printSyntaxFactoryInterface(OS);
     case Category::SyntaxRewriter:
-      return printSyntaxRewriterInterface(OS, Records);
+      return printSyntaxRewriterInterface(OS);
     case Category::Unknown:
       llvm_unreachable("Unknown category given");
   }
 }
 
-static bool genImplementation(raw_ostream &OS, RecordKeeper &Records) {
+static bool genImplementation(raw_ostream &OS) {
   switch (getCategory()) {
     case Category::Decl:
     case Category::Expr:
     case Category::Stmt:
     case Category::Type:
     case Category::Pattern:
-      return printSyntaxImplementations(OS, Records);
+      return printSyntaxImplementations(OS);
     case Category::SyntaxFactory:
-      return printSyntaxFactoryImplementation(OS, Records);
+      return printSyntaxFactoryImplementation(OS);
     case Category::SyntaxRewriter:
-      return printSyntaxRewriterImplementation(OS, Records);
+      return printSyntaxRewriterImplementation(OS);
     case Category::Unknown:
       llvm_unreachable("Unknown category given");
   }
 }
 
 static bool SyntaxTableGenMain(raw_ostream &OS, RecordKeeper &Records) {
+  AllRecords = &Records;
   switch (options::Action) {
     case ActionType::None:
       llvm::errs() << "action required\n";
       llvm::cl::PrintHelpMessage();
       return true;
     case ActionType::GenInterface:
-      return genInterface(OS, Records);
+      return genInterface(OS);
     case ActionType::GenImplementation:
-      return genImplementation(OS, Records);
+      return genImplementation(OS);
   }
 }
 
