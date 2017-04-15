@@ -1,3 +1,4 @@
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/CommandLine.h"
@@ -19,12 +20,14 @@ enum class ActionType {
 enum class Category {
   Unknown,
   Decl,
-  Stmt,
   Expr,
+  Stmt,
   Type,
   Pattern,
+  Generic,
+  Attribute,
   SyntaxFactory,
-  SyntaxRewriter
+  SyntaxRewriter,
 };
 
 enum class TargetLanguage {
@@ -32,7 +35,7 @@ enum class TargetLanguage {
 };
 
 RecordKeeper *AllRecords;
-SmallPtrSet<const Record *, 8> SyntaxCategories;
+SmallSet<const Record *, 8> SyntaxCategories;
 
 namespace options {
 static cl::opt<ActionType> Action(
@@ -104,14 +107,14 @@ static const Record *getLayoutNodeRecord(const RecordVal Child) {
   return getLayoutNodeRecord(NodeDef);
 }
 
-static llvm::Optional<const Record *>
+static const Record &
 getSyntaxCategory(const Record *Def) {
   for (const auto Super : Def->getSuperClasses()) {
     if (SyntaxCategories.count(Super.first)) {
-      return Super.first;
+      return *Super.first;
     }
   }
-  return None;
+  llvm_unreachable("Record didn't have a syntax category??");
 }
 
 bool canBeAnyOfSyntaxCategory(const RecordVal Child) {
@@ -149,15 +152,8 @@ static StringRef stripSyntaxSuffix(StringRef TypeName) {
 }
 
 static std::string getMissingSyntaxKind(const RecordVal Child) {
-  auto Node = getLayoutNodeRecord(Child);
-  auto Category = getSyntaxCategory(Node).getValue();
-  return llvm::StringSwitch<std::string>(Category->getName())
-    .Case("Decl", "MissingDecl")
-    .Case("Expr", "MissingExpr")
-    .Case("Stmt", "MissingStmt")
-    .Case("Type", "MissingType")
-    .Case("Pattern", "MissingPattern")
-    .Case("SyntaxCollection", "MissingSyntaxCollection");
+  // TODO
+  return "Missing";
 }
 
 static Category getCategory() {
@@ -167,28 +163,32 @@ static Category getCategory() {
   .Case("Stmt", Category::Stmt)
   .Case("Type", Category::Type)
   .Case("Pattern", Category::Pattern)
+  .Case("Generic", Category::Generic)
+  .Case("Attribute", Category::Attribute)
   .Case("SyntaxFactory", Category::SyntaxFactory)
   .Case("SyntaxRewriter", Category::SyntaxRewriter)
   .Default(Category::Unknown);
 }
 
-static bool categoryIsSyntax() {
+static bool categoryIsInSyntaxHierarchy() {
   switch (getCategory()) {
   case Category::Decl:
   case Category::Expr:
   case Category::Pattern:
   case Category::Stmt:
   case Category::Type:
+  case Category::Generic:
+  case Category::Attribute:
     return true;
   default:
     return false;
   }
 }
 
-static std::vector<RecordVal> getChildrenOf(const Record *Node) {
+static std::vector<RecordVal> getChildrenOf(const Record &Node) {
   std::vector<RecordVal> Children;
 
-  for (const auto Child : Node->getValues()) {
+  for (const auto Child : Node.getValues()) {
     if (!isLayout(Child.getType())) {
       continue;
     }
@@ -224,8 +224,8 @@ static void printSyntaxAssertion(Twine ChildVariable,
   auto NodeTypeName = NodeType->getAsString();
   auto NodeKind = stripSyntaxSuffix(NodeTypeName);
   if (canBeAnyOfSyntaxCategory(Child)) {
-    auto Category = getSyntaxCategory(getLayoutNodeRecord(Child)).getValue();
-    OS << "  assert(" << ChildVariable << "->is" << Category->getName() << "());\n";
+    auto &Category = getSyntaxCategory(getLayoutNodeRecord(Child));
+    OS << "  assert(" << ChildVariable << "->is" << Category.getName() << "());\n";
   } else {
     OS << "  assert(" << ChildVariable << "->getKind() == SyntaxKind::" << NodeKind << ");\n";
   }
@@ -238,7 +238,7 @@ static void printIncludesOfImplementation(raw_ostream &OS) {
   "#include \"swift/Syntax/RawSyntax.h\"\n"
   "#include \"swift/Syntax/SyntaxFactory.h\"\n"
   "#include \"swift/Syntax/" << options::Category;
-  if (categoryIsSyntax()) {
+  if (categoryIsInSyntaxHierarchy()) {
     OS << "Syntax";
   }
   OS << ".h\"\n";
@@ -250,12 +250,38 @@ static void printIncludesOfImplementation(raw_ostream &OS) {
   "using llvm::Optional;\n\n";
 }
 
+static std::string getHeaderGuard() {
+  SmallString<64> GuardScratch;
+  raw_svector_ostream OS(GuardScratch);
+
+  OS << "SWIFT_SYNTAX_" << StringRef(options::Category).upper();
+  if (categoryIsInSyntaxHierarchy()) {
+    OS << "SYNTAX";
+  }
+  OS << "_H";
+  return OS.str();
+}
+
+static void printHeaderGuardStart(raw_ostream &OS) {
+  OS << "#ifndef " << getHeaderGuard() << "\n";
+  OS << "#define " << getHeaderGuard() << "\n\n";
+}
+
+static void printHeaderGuardEnd(raw_ostream &OS) {
+  OS << "#endif // " << getHeaderGuard() << "\n";
+}
+
+static void printIncludesOfInterface(raw_ostream &OS) {
+  OS <<
+  "#include \"swift/Syntax/References.h\"\n";
+}
+
 #pragma mark - Syntax
 
-static bool printSyntaxInterface(const Record *Node, raw_ostream &OS) {
-  auto ClassName = Node->getName();
+static bool printSyntaxInterface(const Record &Node, raw_ostream &OS) {
+  auto ClassName = Node.getName();
   auto Kind = stripSyntaxSuffix(ClassName);
-  auto SuperclassName = Node->getSuperClasses().back().first->getName() + "Syntax";
+  auto SuperclassName = Node.getSuperClasses().back().first->getName();
   auto DataClassName = ClassName + "Data";
 
   OS << "class " << ClassName << " final : public Syntax {\n"
@@ -277,7 +303,7 @@ static bool printSyntaxInterface(const Record *Node, raw_ostream &OS) {
   "public:\n";
   for (const auto Child : getChildrenOf(Node)) {
     auto ChildType = cast<RecordRecTy>(Child.getType());
-    auto ChildTypeName = ChildType->getAsString() + "Syntax";
+    auto ChildTypeName = ChildType->getAsString();
     auto OptionalChildTypeName = "llvm::Optional<" + ChildTypeName + ">";
     if (ChildType->getRecord() == AllRecords->getClass("Token")) {
       ChildTypeName = "RC<" + ChildTypeName + ">";
@@ -295,9 +321,8 @@ static bool printSyntaxInterface(const Record *Node, raw_ostream &OS) {
   return false;
 }
 
-static bool printSyntaxDataInterface(const Record *Node,
-                                     raw_ostream &OS) {
-  auto ClassName = Node->getName();
+static bool printSyntaxDataInterface(const Record &Node, raw_ostream &OS) {
+  auto ClassName = Node.getName();
   auto Kind = stripSyntaxSuffix(ClassName);
   auto DataClassName = ClassName + "Data";
 
@@ -319,22 +344,21 @@ static bool printSyntaxDataInterface(const Record *Node,
 }
 
 static bool printSyntaxInterfaces(raw_ostream &OS) {
-  auto Nodes = AllRecords->getAllDerivedDefinitions(options::Category);
+  const auto &Nodes = AllRecords->getDefs();
   auto Any = std::string { "Any" } + options::Category;
-  for (const auto *Node : Nodes) {
-    if (Node->getName() == Any) {
+  for (const auto &Node : Nodes) {
+    if (Node.second->getName() == Any) {
       continue;
     }
-    printSyntaxInterface(Node, OS);
-    printSyntaxDataInterface(Node, OS);
+    printSyntaxInterface(*Node.second, OS);
+    printSyntaxDataInterface(*Node.second, OS);
   }
 
   return false;
 }
 
-static bool printSyntaxImplementation(const Record *Node,
-                                      raw_ostream &OS) {
-  auto ClassName = Node->getName();
+static bool printSyntaxImplementation(const Record &Node, raw_ostream &OS) {
+  auto ClassName = Node.getName();
 
   for (auto Child : getChildrenOf(Node)) {
     auto ChildName = Child.getName();
@@ -371,10 +395,10 @@ static bool printSyntaxImplementation(const Record *Node,
   return false;
 }
 
-static bool printSyntaxDataImplementation(const Record *Node, raw_ostream &OS) {
-  auto ClassName = Node->getName();
+static bool printSyntaxDataImplementation(const Record &Node, raw_ostream &OS) {
+  auto ClassName = Node.getName();
   auto Kind = stripSyntaxSuffix(ClassName);
-  auto SuperclassName = Node->getSuperClasses().back().first->getName();
+  auto SuperclassName = Node.getSuperClasses().back().first->getName();
   auto DataClassName = ClassName + "Data";
   auto DataSuperclassName = SuperclassName + "Data";
 
@@ -429,17 +453,23 @@ static bool printSyntaxDataImplementation(const Record *Node, raw_ostream &OS) {
 }
 
 static bool printSyntaxImplementations(raw_ostream &OS) {
-  auto Nodes = AllRecords->getAllDerivedDefinitions(options::Category);
+  const auto &Nodes = AllRecords->getDefs();
   auto Any = std::string { "Any" } + options::Category;
-  for (const auto *Node : Nodes) {
-    if (Node->getName() == Any) {
+  for (const auto &Node : Nodes) {
+    if (Node.second->getName() == Any) {
+      continue;
+    }
+    if (Node.second->getName().startswith("anonymous")) {
+      continue;
+    }
+    if (Node.second->getValueAsString("Category") != options::Category) {
       continue;
     }
     printAutogenReminder(OS);
-    OS << "#pragma mark - " << Node->getName() << " API\n\n";
-    printSyntaxImplementation(Node, OS);
-    OS << "#pragma mark - " << Node->getName() << " Data\n\n";
-    printSyntaxDataImplementation(Node, OS);
+    OS << "#pragma mark - " << Node.second->getName() << " API\n\n";
+    printSyntaxImplementation(*Node.second, OS);
+    OS << "#pragma mark - " << Node.second->getName() << " Data\n\n";
+    printSyntaxDataImplementation(*Node.second, OS);
   }
 
   return false;
@@ -471,20 +501,33 @@ static bool printSyntaxRewriterImplementation(raw_ostream &OS) {
 }
 
 static bool genInterface(raw_ostream &OS) {
+  printHeaderGuardStart(OS);
+  printIncludesOfInterface(OS);
+
+  auto Failed = true;
+
   switch (getCategory()) {
     case Category::Decl:
     case Category::Expr:
     case Category::Stmt:
     case Category::Type:
     case Category::Pattern:
-      return printSyntaxInterfaces(OS);
+    case Category::Generic:
+    case Category::Attribute:
+      Failed = printSyntaxInterfaces(OS);
+      break;
     case Category::SyntaxFactory:
-      return printSyntaxFactoryInterface(OS);
+      Failed = printSyntaxFactoryInterface(OS);
+      break;
     case Category::SyntaxRewriter:
-      return printSyntaxRewriterInterface(OS);
+      Failed = printSyntaxRewriterInterface(OS);
+      break;
     case Category::Unknown:
       llvm_unreachable("Unknown category given");
   }
+
+  printHeaderGuardEnd(OS);
+  return Failed;
 }
 
 static bool genImplementation(raw_ostream &OS) {
@@ -496,6 +539,8 @@ static bool genImplementation(raw_ostream &OS) {
     case Category::Stmt:
     case Category::Type:
     case Category::Pattern:
+    case Category::Generic:
+    case Category::Attribute:
       return printSyntaxImplementations(OS);
     case Category::SyntaxFactory:
       return printSyntaxFactoryImplementation(OS);
@@ -508,6 +553,7 @@ static bool genImplementation(raw_ostream &OS) {
 
 static bool SyntaxTableGenMain(raw_ostream &OS, RecordKeeper &Records) {
   AllRecords = &Records;
+  SyntaxCategories.insert(AllRecords->getClass("Syntax"));
   SyntaxCategories.insert(AllRecords->getClass("Decl"));
   SyntaxCategories.insert(AllRecords->getClass("Stmt"));
   SyntaxCategories.insert(AllRecords->getClass("Expr"));
