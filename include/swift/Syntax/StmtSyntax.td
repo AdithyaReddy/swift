@@ -218,3 +218,18 @@ def ConditionalCompilationStmtSyntax : Stmt {
   Layout PoundEndif = Layout<PoundEndifToken>;
 }
 
+def LineControlSpecSyntax : Syntax {
+  Layout File = Layout<IdentifierToken>; // FIXME: file
+  Layout FileColon = Layout<ColonToken>;
+  Layout FileValue = Layout<StringLiteralToken>;
+  Layout Comma = Layout<CommaToken>;
+  Layout Line = Layout<IdentifierToken>; // FIXME: line
+  Layout LineColon = Layout<ColonToken>;
+  Layout LineValue = Layout<IntegerLiteralToken>;
+}
+def LineControlStmtSyntax : Stmt {
+  Layout PoundSourceLocation = Layout<PoundSourceLocationToken>;
+  Layout OpenParen = Layout<LeftParenToken>;
+  Layout FileAndLine = Layout<LineControlSpecSyntax>;
+  Layout CloseParen = Layout<RightParenToken>;
+}

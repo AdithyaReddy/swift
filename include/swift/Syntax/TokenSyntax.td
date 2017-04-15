@@ -26,6 +26,7 @@ def PoundEndifToken : Keyword<"#endif", "pound_endif">;
 def PoundElseToken : Keyword<"#else", "pound_else">;
 def PoundElseifToken : Keyword<"#elseif", "pound_elseif">;
 def PoundIfToken : Keyword<"#if", "pound_if">;
+def PoundSourceLocationToken : Keyword<"#sourceLocation", "pound_sourceLocation">;
 
 def ArrowToken: Token<"->", "arrow">;
 def AtSignToken: Token<"@", "at_sign">;

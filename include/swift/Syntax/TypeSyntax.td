@@ -42,9 +42,9 @@ def FunctionTypeArgumentSyntax : Syntax {
 def FunctionTypeArgumentListSyntax : SyntaxCollection<FunctionTypeArgumentSyntax>;
 def FunctionTypeSyntax : Type {
   Layout TypeAttributes = Layout<AttributeListSyntax>;
-  Layout LeftArgumentsParen = Layout<LeftParenToken>;
+  Layout OpenParen = Layout<LeftParenToken>;
   Layout ArgumentList = Layout<FunctionTypeArgumentListSyntax>;
-  Layout RightArgumentsParen = Layout<RightParenToken>;
+  Layout CloseParen = Layout<RightParenToken>;
   Layout ThrowsOrRethrows = Layout<AnyToken>;
   Layout Arrow = Layout<ArrowToken>;
   Layout ReturnType = Layout<AnyType>;
