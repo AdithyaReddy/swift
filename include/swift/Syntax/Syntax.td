@@ -22,6 +22,6 @@ include "AttributeSyntax.td"
 include "StmtSyntax.td"
 include "DeclSyntax.td"
 include "ExprSyntax.td"
-include "PatternSyntax.td"
 include "TypeSyntax.td"
+include "PatternSyntax.td"
 

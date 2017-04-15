@@ -7,7 +7,7 @@ class Layout<Syntax node> {
   bit Required = 1;
 }
 
-class OptionalLayout<Syntax node> : Layout {
+class OptionalLayout<Syntax node> : Layout<node> {
   let Required = 0;
 }
 
@@ -50,8 +50,8 @@ class Token<string spelling, string kind> : Syntax {
 // FIXME: Use a list of possible tokens?
 def AnyToken : Token<"", "">;
 
-def TokenChoice<list<Token> choices> : Syntax {
-  list Choices = choices
+class TokenChoice<list<Token> choices> : Syntax {
+  list<Token> Choices = choices;
 }
 
 
