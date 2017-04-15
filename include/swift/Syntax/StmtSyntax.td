@@ -199,7 +199,22 @@ def DeferStmtSyntax : Stmt {
   Layout Semicolon = Layout<SemicolonToken>;
 }
 
+def ElseDirectiveClause : Syntax {
+  Layout PoundElse = Layout<PoundElseToken>;
+  Layout Body = Layout<StatementListSyntax>;
+}
+def ElseifDirectiveClause : Syntax {
+  Layout PoundElseif = Layout<PoundElseifToken>;
+  Layout Condition = Layout<AnyExpr>;
+  Layout Body = Layout<StatementListSyntax>;
+}
+def ElseifDirectiveClauseListSyntax : SyntaxCollection<ElseifDirectiveClause>;
 def ConditionalCompilationStmtSyntax : Stmt {
-  
+  Layout PoundIf = Layout<PoundIfToken>;
+  Layout Condition = Layout<AnyExpr>;
+  Layout Body = Layout<StatementListSyntax>;
+  Layout ElseifDirectiveClauses = Layout<ElseifDirectiveClauseListSyntax>;
+  Layout ElseClause = Layout<ElseDirectiveClause>;
+  Layout PoundEndif = Layout<PoundEndifToken>;
 }
 

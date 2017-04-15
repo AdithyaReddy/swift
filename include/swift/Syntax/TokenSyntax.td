@@ -22,9 +22,9 @@ def WhereToken : Keyword<"where", "kw_where">;
 def WhileToken : Keyword<"while", "kw_while">;
 
 def PoundAvailableToken : Keyword<"#available", "pound_available">;
-def PoundEndIfToken : Keyword<"#endif", "pound_endif">;
+def PoundEndifToken : Keyword<"#endif", "pound_endif">;
 def PoundElseToken : Keyword<"#else", "pound_else">;
-def PoundElseIfToken : Keyword<"#elseif", "pound_elseif">;
+def PoundElseifToken : Keyword<"#elseif", "pound_elseif">;
 def PoundIfToken : Keyword<"#if", "pound_if">;
 
 def ArrowToken: Token<"->", "arrow">;
