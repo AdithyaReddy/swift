@@ -1,9 +1,13 @@
-class AttributeArgumentListElement;
+class AttributeArgumentListElement {
+  string Category = "Attribute";
+}
 def AnyAttributeArgumentListElement : AttributeArgumentListElement, Syntax;
 
-def AttributeArgumentListSyntax : SyntaxCollection<AnyAttributeArgumentListElement>;
+def AttributeArgumentListSyntax : SyntaxCollection<AnyAttributeArgumentListElement> {
+  let Category = "Attribute";
+}
 
-def BalancedTokensSyntax : AttributeArgumentListElement {
+def BalancedTokensSyntax : AttributeArgumentListElement, Syntax {
   Layout LeftMatch = Layout<AnyToken>;
   Layout BalancedTokens = Layout<AttributeArgumentListSyntax>;
   Layout RightMatch = Layout<AnyToken>;
@@ -18,4 +22,6 @@ def AttributeSyntax : Syntax {
   Layout CloseParen = Layout<RightParenToken>;
 }
 
-def AttributeListSyntax : SyntaxCollection<AttributeSyntax>;
+def AttributeListSyntax : SyntaxCollection<AttributeSyntax> {
+  let Category = "Attribute";
+}

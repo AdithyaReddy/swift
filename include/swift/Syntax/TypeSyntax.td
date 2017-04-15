@@ -1,6 +1,5 @@
-
 def TypeAnnotationSyntax : Syntax {
-  Layout Attributes = Layout<SyntaxCollection<AttributeSyntax>>;
+  Layout Attributes = Layout<AttributeListSyntax>;
   Layout InOut = Layout<InoutToken>;
   Layout Type = Layout<AnyType>;
 }

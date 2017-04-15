@@ -1,4 +1,6 @@
-class Syntax;
+class Syntax {
+  string Category = "Common";
+}
 
 class Layout<Syntax node> {
   Syntax Node = node;
@@ -8,19 +10,29 @@ class SyntaxCollection<Syntax element> : Syntax {
   Syntax Element = element;
 }
 
-class Stmt : Syntax;
+class Stmt : Syntax {
+  let Category = "Stmt";
+}
 def AnyStmt: Stmt;
 
-class Expr : Syntax;
+class Expr : Syntax {
+  let Category = "Expr";
+}
 def AnyExpr : Expr;
 
-class Decl : Syntax;
+class Decl : Syntax {
+  let Category = "Decl";
+}
 def AnyDecl : Decl;
 
-class Pattern : Syntax;
+class Pattern : Syntax {
+  let Category = "Pattern";
+}
 def AnyPattern : Pattern;
 
-class Type : Syntax;
+class Type : Syntax {
+  let Category = "Type";
+}
 def AnyType : Type;
 
 class Attribute : Syntax;
@@ -28,6 +40,8 @@ class Attribute : Syntax;
 class Token<string spelling, string kind> : Syntax {
   string Spelling = spelling;
   string Kind = kind;
+  let Category = "Token";
 }
+// FIXME: Use a list of possible tokens?
 def AnyToken : Token<"", "">;
 
