@@ -4,6 +4,11 @@ class Syntax {
 
 class Layout<Syntax node> {
   Syntax Node = node;
+  bit Required = 1;
+}
+
+class OptionalLayout<Syntax node> : Layout {
+  let Required = 0;
 }
 
 class SyntaxCollection<Syntax element> : Syntax {
@@ -44,4 +49,9 @@ class Token<string spelling, string kind> : Syntax {
 }
 // FIXME: Use a list of possible tokens?
 def AnyToken : Token<"", "">;
+
+def TokenChoice<list<Token> choices> : Syntax {
+  list Choices = choices
+}
+
 
