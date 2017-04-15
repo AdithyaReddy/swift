@@ -129,6 +129,9 @@ static const RecordRecTy *getLayoutNodeType(const RecordVal Child) {
   auto NodeField = NodeDef->getValue("Node");
   auto NodeValue = cast<DefInit>(NodeField->getValue());
   auto NodeType = NodeValue->getType();
+  if (isToken(NodeType)) {
+    NodeType = AllRecords->getClass("Token")->getDefInit()->getType();
+  }
   return cast<RecordRecTy>(NodeType);
 }
 
@@ -183,6 +186,20 @@ static bool categoryIsInSyntaxHierarchy() {
   default:
     return false;
   }
+}
+
+static bool shouldPrintDef(const Record &Rec) {
+  auto Any = std::string { "Any" } + options::Category;
+  if (Rec.getName() == Any) {
+    return false;
+  }
+  if (Rec.getName().startswith("anonymous")) {
+    return false;
+  }
+  if (Rec.getValueAsString("Category") != options::Category) {
+    return false;
+  }
+  return true;
 }
 
 static std::vector<RecordVal> getChildrenOf(const Record &Node) {
@@ -262,19 +279,37 @@ static std::string getHeaderGuard() {
   return OS.str();
 }
 
-static void printHeaderGuardStart(raw_ostream &OS) {
-  OS << "#ifndef " << getHeaderGuard() << "\n";
-  OS << "#define " << getHeaderGuard() << "\n\n";
-}
+struct HeaderGuard {
+  raw_ostream &OS;
+  HeaderGuard(raw_ostream &OS) : OS(OS) {
+    OS << "#ifndef " << getHeaderGuard() << "\n";
+    OS << "#define " << getHeaderGuard() << "\n\n";
+  }
 
-static void printHeaderGuardEnd(raw_ostream &OS) {
-  OS << "#endif // " << getHeaderGuard() << "\n";
-}
+  ~HeaderGuard() {
+    OS << "#endif // " << getHeaderGuard() << "\n";
+  }
+};
 
 static void printIncludesOfInterface(raw_ostream &OS) {
   OS <<
-  "#include \"swift/Syntax/References.h\"\n";
+  "#include \"swift/Syntax/References.h\"\n"
+  "#include \"swift/Syntax/SyntaxData.h\"\n"
+  "#include \"swift/Syntax/Syntax.h\"\n\n";
 }
+
+struct Namespaces {
+  raw_ostream &OS;
+  Namespaces(raw_ostream &OS) : OS(OS) {
+    OS << "namespace swift {\n";
+    OS << "namespace syntax {\n";
+  }
+
+  ~Namespaces() {
+    OS << "} // end namespace syntax\n";
+    OS << "} // end namespace swift\n";
+  }
+};
 
 #pragma mark - Syntax
 
@@ -290,26 +325,28 @@ static bool printSyntaxInterface(const Record &Node, raw_ostream &OS) {
   "  friend class SyntaxData;\n"
   "\n"
   "  using DataType = " << DataClassName << ";\n"
-  "\n"
-  "  enum class Cursor : CursorIndex {\n";
-  for (const auto Child : getChildrenOf(Node)) {
-    OS << "    " << Child.getName() << ",\n";
+  "\n";
+
+  if (!getChildrenOf(Node).empty()) {
+    OS << "  enum class Cursor : CursorIndex {\n";
+    for (const auto Child : getChildrenOf(Node)) {
+      OS << "    " << Child.getName() << ",\n";
+    }
+    OS << "  };\n";
   }
-  OS << "  };\n";
 
   OS <<
-  "  " << ClassName << "(RC<SyntaxData> Root, const " << DataClassName << "*Data)\n"
+  "  " << ClassName << "(RC<SyntaxData> Root, const " << DataClassName << "* Data)\n"
   "    : " << SuperclassName << "(Root, Data) {}\n"
   "public:\n";
   for (const auto Child : getChildrenOf(Node)) {
     auto ChildType = cast<RecordRecTy>(Child.getType());
-    auto ChildTypeName = ChildType->getAsString();
-    auto OptionalChildTypeName = "llvm::Optional<" + ChildTypeName + ">";
+    auto ChildTypeName = getLayoutNodeType(Child)->getAsString();
     if (ChildType->getRecord() == AllRecords->getClass("Token")) {
-      ChildTypeName = "RC<" + ChildTypeName + ">";
+      ChildTypeName = std::string("RC<") + ChildTypeName + ">";
     }
 
-    OS << "  " << OptionalChildTypeName << " get" << Child.getName() << "() const;\n";
+    OS << "  " << ChildTypeName << " get" << Child.getName() << "() const;\n";
     OS << "  " << ClassName << " with" << Child.getName() << "(" << ChildTypeName << " New" << Child.getName() << ") const;\n\n";
   }
   OS <<
@@ -337,21 +374,23 @@ static bool printSyntaxDataInterface(const Record &Node, raw_ostream &OS) {
   "\n"
   "public:\n"
   "  static bool classof(const SyntaxData *SD) {\n"
-  "    return S->getKind() == SyntaxKind::" << Kind << ";\n"
+  "    return SD->getKind() == SyntaxKind::" << Kind << ";\n"
   "  }\n"
   "};\n\n";
   return false;
 }
 
 static bool printSyntaxInterfaces(raw_ostream &OS) {
+  HeaderGuard HG { OS };
+  printIncludesOfInterface(OS);
+  Namespaces NS { OS };
   const auto &Nodes = AllRecords->getDefs();
-  auto Any = std::string { "Any" } + options::Category;
   for (const auto &Node : Nodes) {
-    if (Node.second->getName() == Any) {
+    if (!shouldPrintDef(*Node.second)) {
       continue;
     }
-    printSyntaxInterface(*Node.second, OS);
     printSyntaxDataInterface(*Node.second, OS);
+    printSyntaxInterface(*Node.second, OS);
   }
 
   return false;
@@ -454,15 +493,8 @@ static bool printSyntaxDataImplementation(const Record &Node, raw_ostream &OS) {
 
 static bool printSyntaxImplementations(raw_ostream &OS) {
   const auto &Nodes = AllRecords->getDefs();
-  auto Any = std::string { "Any" } + options::Category;
   for (const auto &Node : Nodes) {
-    if (Node.second->getName() == Any) {
-      continue;
-    }
-    if (Node.second->getName().startswith("anonymous")) {
-      continue;
-    }
-    if (Node.second->getValueAsString("Category") != options::Category) {
+    if (!shouldPrintDef(*Node.second)) {
       continue;
     }
     printAutogenReminder(OS);
@@ -478,6 +510,8 @@ static bool printSyntaxImplementations(raw_ostream &OS) {
 #pragma mark - SyntaxFactory
 
 static bool printSyntaxFactoryInterface(raw_ostream &OS) {
+  HeaderGuard HG { OS };
+  Namespaces NS { OS };
   // TODO
   return false;
 }
@@ -491,6 +525,8 @@ static bool printSyntaxFactoryImplementation(raw_ostream &OS) {
 #pragma mark - SyntaxRewriter
 
 static bool printSyntaxRewriterInterface(raw_ostream &OS) {
+  HeaderGuard HG { OS };
+  Namespaces NS { OS };
   // TODO
   return false;
 }
@@ -501,11 +537,6 @@ static bool printSyntaxRewriterImplementation(raw_ostream &OS) {
 }
 
 static bool genInterface(raw_ostream &OS) {
-  printHeaderGuardStart(OS);
-  printIncludesOfInterface(OS);
-
-  auto Failed = true;
-
   switch (getCategory()) {
     case Category::Decl:
     case Category::Expr:
@@ -514,20 +545,17 @@ static bool genInterface(raw_ostream &OS) {
     case Category::Pattern:
     case Category::Generic:
     case Category::Attribute:
-      Failed = printSyntaxInterfaces(OS);
+      return printSyntaxInterfaces(OS);
       break;
     case Category::SyntaxFactory:
-      Failed = printSyntaxFactoryInterface(OS);
+      return printSyntaxFactoryInterface(OS);
       break;
     case Category::SyntaxRewriter:
-      Failed = printSyntaxRewriterInterface(OS);
+      return printSyntaxRewriterInterface(OS);
       break;
     case Category::Unknown:
       llvm_unreachable("Unknown category given");
   }
-
-  printHeaderGuardEnd(OS);
-  return Failed;
 }
 
 static bool genImplementation(raw_ostream &OS) {
