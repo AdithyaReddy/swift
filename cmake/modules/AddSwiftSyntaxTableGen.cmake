@@ -15,7 +15,7 @@ function(swift_add_syntax_generated_source category)
 
   set(out_filename ${SYNTAX_GEN_CATEGORY})
   if (SYNTAX_GEN_CATEGORY IN_LIST SYNTAX_GEN_SYNTAX_CATEGORIES)
-    set(out_filename "${out_filename}Syntax")
+    set(out_filename "${out_filename}")
   endif()
 
   if (${SYNTAX_GEN_ACTION} STREQUAL "interface")
