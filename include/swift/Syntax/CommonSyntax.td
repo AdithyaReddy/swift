@@ -51,7 +51,7 @@ class TokenSyntax<string spelling, string kind> : Syntax {
 def AnyTokenSyntax : TokenSyntax<"", "">;
 
 class TokenChoice<list<TokenSyntax> choices> : Syntax {
-  list<Token> Choices = choices;
+  list<TokenSyntax> Choices = choices;
 }
 
 
