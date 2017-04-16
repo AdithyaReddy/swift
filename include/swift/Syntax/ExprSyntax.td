@@ -8,7 +8,7 @@ class PostfixExprSyntax : ExprSyntax;
 def AnyPostfixExprSyntax : PostfixExprSyntax;
 
 class LiteralExprSyntax : PostfixExprSyntax;
-def PoundLineExprSyntax : LiteralExpressionSyntax {
+def PoundLineExprSyntax : LiteralExprSyntax {
   Layout PoundLine = Layout<PoundLineTokenSyntax>;
 }
 def PoundFileExprSyntax : LiteralExprSyntax {
