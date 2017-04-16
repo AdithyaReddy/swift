@@ -1,7 +1,7 @@
 class BindablePatternSyntax : PatternSyntax;
 def AnyBindablePatternSyntax : BindablePatternSyntax;
 
-def WilcardPatternSyntax : BindablePatternSyntax {
+def WildcardPatternSyntax : BindablePatternSyntax {
  Layout Wildcard = Layout<WildcardTokenSyntax>;
  Layout TypeAnnotation = OptionalLayout<TypeAnnotationSyntax>;
 }
