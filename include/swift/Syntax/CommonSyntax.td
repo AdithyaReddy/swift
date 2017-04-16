@@ -1,5 +1,5 @@
 class Syntax {
-  string Category = "Common";
+  string Category = "CommonSyntax";
 }
 
 class Layout<Syntax node> {

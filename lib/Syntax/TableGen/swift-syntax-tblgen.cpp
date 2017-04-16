@@ -26,6 +26,7 @@ enum class Category {
   PatternSyntax,
   GenericSyntax,
   AttributeSyntax,
+  CommonSyntax,
   SyntaxFactory,
   SyntaxRewriter,
 };
@@ -87,7 +88,6 @@ static bool isBaseSyntaxClass(const Record &Node) {
   .Case("StmtSyntax", true)
   .Case("TypeSyntax", true)
   .Case("PatternSyntax", true)
-  .Case("GenericSyntax", true)
   .Default(false);
 }
 
@@ -200,6 +200,7 @@ static Category getCategory() {
   .Case("PatternSyntax", Category::PatternSyntax)
   .Case("GenericSyntax", Category::GenericSyntax)
   .Case("AttributeSyntax", Category::AttributeSyntax)
+  .Case("CommonSyntax", Category::CommonSyntax)
   .Case("SyntaxFactory", Category::SyntaxFactory)
   .Case("SyntaxRewriter", Category::SyntaxRewriter)
   .Default(Category::Unknown);
@@ -238,7 +239,7 @@ static bool shouldPrintDef(const Record &Rec) {
   if (Rec.getName() == Any) {
     return false;
   }
-  if (Rec.getName().startswith("anonymous")) {
+  if (Rec.isAnonymous()) {
     return false;
   }
   if (Rec.getValueAsString("Category") != options::Category) {
@@ -348,6 +349,21 @@ struct Namespaces {
       OS << "\n";
       auto Categories = SyntaxCategories;
       Categories.erase(getGeneratingCategoryRecord());
+
+      // Add the common categories.
+      for (const auto &NameAndRec : AllRecords->getDefs()) {
+        const auto *Rec = NameAndRec.second.get();
+        if (Rec->isAnonymous()) {
+          continue;
+        }
+        if (auto CategoryField = Rec->getValue("Category")) {
+          auto CategoryName = CategoryField->getValue()->getAsUnquotedString();
+          if (CategoryName == "CommonSyntax") {
+            Categories.insert(Rec);
+          }
+        }
+      }
+
       for (const auto *Category : Categories) {
         OS << "class " << Category->getName() << ";\n";
         OS << "class " << Category->getName() << "Data;\n";
@@ -614,6 +630,7 @@ static bool genInterface(raw_ostream &OS) {
     case Category::PatternSyntax:
     case Category::GenericSyntax:
     case Category::AttributeSyntax:
+    case Category::CommonSyntax:
       return printSyntaxInterfaces(OS);
       break;
     case Category::SyntaxFactory:
@@ -638,6 +655,7 @@ static bool genImplementation(raw_ostream &OS) {
     case Category::PatternSyntax:
     case Category::GenericSyntax:
     case Category::AttributeSyntax:
+    case Category::CommonSyntax:
       return printSyntaxImplementations(OS);
     case Category::SyntaxFactory:
       return printSyntaxFactoryImplementation(OS);
