@@ -21,6 +21,7 @@ def RepeatTokenSyntax : Keyword<"repeat", "kw_repeat">;
 def ReturnTokenSyntax : Keyword<"return", "kw_return">;
 def SwitchTokenSyntax : Keyword<"swift", "kw_switch">;
 def ThrowTokenSyntax : Keyword<"throw", "kw_throw">;
+def TryTokenSyntax : Keyword<"try", "kw_try">;
 def VarTokenSyntax : Keyword<"var", "kw_var">;
 def WhereTokenSyntax : Keyword<"where", "kw_where">;
 def WhileTokenSyntax : Keyword<"while", "kw_while">;
@@ -32,6 +33,10 @@ def PoundElseTokenSyntax : Keyword<"#else", "pound_else">;
 def PoundElseifTokenSyntax : Keyword<"#elseif", "pound_elseif">;
 def PoundIfTokenSyntax : Keyword<"#if", "pound_if">;
 def PoundSourceLocationTokenSyntax : Keyword<"#sourceLocation", "pound_sourceLocation">;
+def PoundFileTokenSyntax : Keyword<"#file", "pound_file">;
+def PoundLineTokenSyntax : Keyword<"#line", "pound_line">;
+def PoundColumnTokenSyntax : Keyword<"#column", "pound_column">;
+def PoundFunctionTokenSyntax : Keyword<"#function", "pound_function">;
 
 def ArrowTokenSyntax: TokenSyntax<"->", "arrow">;
 def AtSignTokenSyntax: TokenSyntax<"@", "at_sign">;
@@ -51,6 +56,9 @@ def AmpersandTokenSyntax: TokenSyntax<"&", "amp_prefix">;
 def QuestionMarkPostfixTokenSyntax: TokenSyntax<"?", "question_postfix">;
 def QuestionMarkInfixTokenSyntax: TokenSyntax<"?", "question_infix">;
 def ExclamationMarkTokenSyntax: TokenSyntax<"!", "exclaim_postfix">;
+def BinaryOperatorTokenSyntax : TokenSyntax<"",  "oper_binary">;
+def PrefixOperatorTokenSyntax : TokenSyntax<"", "oper_prefix">;
+def PostfixOperatorTokenSyntax : TokenSyntax<"", "oper_postfix">;
 
 def IntegerLiteralTokenSyntax : TokenSyntax<"", "integer_literal">;
 def FloatingLiteralTokenSyntax : TokenSyntax<"", "floating_literal">;

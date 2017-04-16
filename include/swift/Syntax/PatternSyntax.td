@@ -36,7 +36,7 @@ def AsTypePatternSyntax : BindablePatternSyntax {
 }
 def EnumCasePatternSyntax : PatternSyntax {
   Layout TypeIdentifier = OptionalLayout<TypeIdentifierSyntax>;
-  Layout Period = Layout<TokenChoice<[PeriodTokenSyntax, PeriodPrefixTokenSyntax]>>;
+  Layout Period = Layout<PeriodTokenSyntax>;
   Layout CaseName = Layout<IdentifierTokenSyntax>;
   Layout AssociatedTuple = OptionalLayout<TuplePatternSyntax>;
 }
