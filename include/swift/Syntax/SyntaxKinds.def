@@ -98,6 +98,11 @@ ABSTRACT_SYNTAX(ExprSyntax, Syntax)
   SYNTAX(SymbolicReferenceExpr, ExprSyntax)
 SYNTAX_RANGE(Expr, MissingExpr, SymbolicReferenceExpr)
 
+// Patterns
+ABSTRACT_SYNTAX(PatternSyntax, Syntax)
+  MISSING_SYNTAX(MissingPattern, PatternSyntax)
+SYNTAX_RANGE(Pattern, MissingPattern, MissingPattern)
+
 // Other stuff
 SYNTAX(BalancedTokens, Syntax)
 SYNTAX(TypeAttribute, Syntax)

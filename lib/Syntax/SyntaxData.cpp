@@ -67,6 +67,10 @@ bool SyntaxData::isExpr() const {
   return Raw->isExpr();
 }
 
+bool SyntaxData::isPattern() const {
+  return Raw->isPattern();
+}
+
 bool SyntaxData::isUnknown() const {
   return Raw->isUnknown();
 }

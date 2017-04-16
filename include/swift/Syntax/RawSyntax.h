@@ -236,6 +236,11 @@ struct RawSyntax : public llvm::ThreadSafeRefCountedBase<RawSyntax> {
     return Kind >= SyntaxKind::First_Expr && Kind <= SyntaxKind::Last_Expr;
   }
 
+  /// Returns true if this raw syntax node is some kind of pattern.
+  bool isPattern() const {
+    return Kind >= SyntaxKind::First_Pattern && Kind <= SyntaxKind::Last_Pattern;
+  }
+
   /// Return true if this raw syntax node is a token.
   bool isToken() const {
     return Kind == SyntaxKind::Token;

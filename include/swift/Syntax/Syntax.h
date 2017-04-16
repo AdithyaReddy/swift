@@ -138,6 +138,9 @@ public:
   /// Returns true if this syntax node represents a type.
   bool isType() const;
 
+  /// Returns true if this syntax node represents a pattern.
+  bool isPattern() const;
+
   /// Returns true if this syntax is of some "unknown" kind.
   bool isUnknown() const;
 

@@ -242,6 +242,9 @@ public:
   /// Returns true if the data node represents expression syntax.
   bool isExpr() const;
 
+  /// Returns true if the data node represents pattern syntax.
+  bool isPattern() const;
+
   /// Returns true if this syntax is of some "unknown" kind.
   bool isUnknown() const;
 

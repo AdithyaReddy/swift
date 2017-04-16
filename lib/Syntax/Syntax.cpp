@@ -55,6 +55,10 @@ bool Syntax::isExpr() const {
   return Data->isExpr();
 }
 
+bool Syntax::isPattern() const {
+  return Data->isPattern();
+}
+
 bool Syntax::isUnknown() const {
   return Data->isUnknown();
 }
