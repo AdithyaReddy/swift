@@ -23,6 +23,8 @@
 
 #include "swift/Syntax/RawSyntax.h"
 #include "swift/Syntax/References.h"
+#include "swift/Syntax/Syntax.h"
+#include "swift/Syntax/SyntaxData.h"
 #include "swift/Syntax/TokenKinds.h"
 #include "swift/Syntax/Trivia.h"
 
@@ -31,7 +33,7 @@ namespace syntax {
 
 class AbsolutePosition;
 
-struct TokenSyntax final : public RawSyntax {
+struct RawTokenSyntax final : public RawSyntax {
   friend struct SyntaxFactory;
   const tok TokenKind;
   const OwnedString Text;
@@ -39,21 +41,21 @@ struct TokenSyntax final : public RawSyntax {
   const Trivia TrailingTrivia;
 
 private:
-  TokenSyntax();
+  RawTokenSyntax();
 
-  TokenSyntax(tok TokenKind, OwnedString Text, const SourcePresence Presence);
+  RawTokenSyntax(tok TokenKind, OwnedString Text, const SourcePresence Presence);
 
-  TokenSyntax(tok TokenKind, OwnedString Text, const SourcePresence Presence,
+  RawTokenSyntax(tok TokenKind, OwnedString Text, const SourcePresence Presence,
             const Trivia &LeadingTrivia, const Trivia &TrailingTrivia);
 
 public:
   /// Make a new token.
-  static RC<TokenSyntax> make(tok TokenKind, OwnedString Text,
-                           const SourcePresence Presence,
-                           const Trivia &LeadingTrivia,
-                           const Trivia &TrailingTrivia) {
-    return RC<TokenSyntax> {
-      new TokenSyntax {
+  static RC<RawTokenSyntax> make(tok TokenKind, OwnedString Text,
+                                 const SourcePresence Presence,
+                                 const Trivia &LeadingTrivia,
+                                 const Trivia &TrailingTrivia) {
+    return RC<RawTokenSyntax> {
+      new RawTokenSyntax {
         TokenKind, Text, Presence,
         LeadingTrivia, TrailingTrivia
       }
@@ -61,19 +63,19 @@ public:
   }
 
   /// Return a token with the specified kind and text, but marked as missing.
-  static RC<TokenSyntax> missingToken(const tok Kind, OwnedString Text) {
+  static RC<RawTokenSyntax> missingToken(const tok Kind, OwnedString Text) {
     return make(Kind, Text, SourcePresence::Missing, {}, {});
   }
 
   /// Return a new token like this one, but with the given leading
   /// trivia instead.
-  RC<TokenSyntax> withLeadingTrivia(const Trivia &NewLeadingTrivia) const {
+  RC<RawTokenSyntax> withLeadingTrivia(const Trivia &NewLeadingTrivia) const {
     return make(TokenKind, Text, Presence, NewLeadingTrivia, TrailingTrivia);
   }
 
   /// Return a new token like this one, but with the given trailing
   /// trivia instead.
-  RC<TokenSyntax> withTrailingTrivia(const Trivia &NewTrailingTrivia) const {
+  RC<RawTokenSyntax> withTrailingTrivia(const Trivia &NewTrailingTrivia) const {
     return make(TokenKind, Text, Presence, LeadingTrivia, NewTrailingTrivia);
   }
 
@@ -191,6 +193,100 @@ public:
 
   static bool classof(const RawSyntax *RS) {
     return RS->Kind == SyntaxKind::Token;
+  }
+};
+
+class TokenSyntaxData final : public SyntaxData {
+  friend class SyntaxData;
+  friend struct SyntaxFactory;
+
+  TokenSyntaxData(RC<RawSyntax> Raw, const SyntaxData *Parent = nullptr,
+                  CursorIndex IndexInParent = 0);
+
+  static RC<TokenSyntaxData> make(RC<RawSyntax> Raw,
+                                  const SyntaxData *Parent = nullptr,
+                                  CursorIndex IndexInParent = 0);
+  static RC<TokenSyntaxData> makeBlank();
+
+public:
+  static bool classof(const SyntaxData *SD) {
+    return SD->getKind() == SyntaxKind::Token;
+  }
+};
+
+class TokenSyntax final : public Syntax {
+  friend struct SyntaxFactory;
+  friend class TokenSyntaxData;
+  friend class SyntaxData;
+
+  using DataType = TokenSyntaxData;
+
+  enum class Cursor : CursorIndex {
+    RawToken,
+  };
+
+
+  RC<RawTokenSyntax> getRawToken() const {
+    return cast<RawTokenSyntax>(getRaw()->getChild(Cursor::RawToken));
+  }
+
+public:
+  TokenSyntax(RC<SyntaxData> Root, const TokenSyntaxData* Data)
+    : Syntax(Root, Data) {}
+
+  /// Returns the text of the token without trivia.
+  std::string getText() const {
+    return getRawToken()->Text.str();
+  }
+
+  /// Returns the leading trivia of the token.
+  Trivia getLeadingTrivia() const {
+    return getRawToken()->LeadingTrivia;
+  }
+
+  /// Returns the trailing trivia of the token.
+  Trivia getTrailingTrivia() const {
+    return getRawToken()->TrailingTrivia;
+  }
+
+  /// Returns true if the token is missing.
+  bool isMissing() const {
+    return getRawToken()->isMissing();
+  }
+
+  /// Returns the kind of token this is.
+  tok getTokenKind() const {
+    return getRawToken()->getTokenKind();
+  }
+
+  /// Returns true if the token is of the ExpectedKind and,
+  /// if non-empty, has the same spelling as ExpectedText.
+  bool is(tok ExpectedKind, StringRef ExpectedText) const {
+    return getRawToken()->is(ExpectedKind, ExpectedText);
+  }
+
+  /// Returns true if the token is of the given kind.
+  bool is(tok K) const {
+    return getRawToken()->is(K);
+  }
+
+  /// Returns true if the token is not of the given kind.
+  bool isNot(tok K) const {
+    return getRawToken()->isNot(K);
+  }
+
+  /// Returns true if the token is some kind of keyword.
+  bool isKeyword() const {
+    return getRawToken()->isKeyword();
+  }
+
+  /// Returns true if the token is some kind of literal.
+  bool isLiteral() const {
+    return getRawToken()->isLiteral();
+  }
+
+  static bool classof(const Syntax *S) {
+    return S->getKind() == SyntaxKind::Token;
   }
 };
 
