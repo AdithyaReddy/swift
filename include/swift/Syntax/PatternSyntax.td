@@ -1,54 +1,54 @@
-class BindablePattern : Pattern;
-def AnyBindablePattern : BindablePattern;
+class BindablePatternSyntax : PatternSyntax;
+def AnyBindablePatternSyntax : BindablePatternSyntax;
 
-def WilcardPatternSyntax : BindablePattern {
- Layout Wildcard = Layout<WildcardToken>;
+def WilcardPatternSyntax : BindablePatternSyntax {
+ Layout Wildcard = Layout<WildcardTokenSyntax>;
  Layout TypeAnnotation = OptionalLayout<TypeAnnotationSyntax>;
 }
-def IdentifierPatternSyntax : BindablePattern {
-  Layout Identifier = Layout<IdentifierToken>;
+def IdentifierPatternSyntax : BindablePatternSyntax {
+  Layout Identifier = Layout<IdentifierTokenSyntax>;
   Layout TypeAnnotation = OptionalLayout<TypeAnnotationSyntax>;
 }
 def LabelSyntax : Syntax {
-  Layout Identifier = Layout<IdentifierToken>;
-  Layout Colon = Layout<ColonToken>;
+  Layout Identifier = Layout<IdentifierTokenSyntax>;
+  Layout Colon = Layout<ColonTokenSyntax>;
 }
 def TuplePatternElementSyntax : Syntax {
   Layout Label = OptionalLayout<LabelSyntax>;
-  Layout Pattern = Layout<AnyPattern>;
+  Layout PatternSyntax = Layout<AnyPatternSyntax>;
   Layout Comma = Layout<LabelSyntax>;
 }
 def TuplePatternElementListSyntax : SyntaxCollection<TuplePatternElementSyntax>;
-def TuplePatternSyntax : BindablePattern {
-  Layout OpenParen = Layout<LeftParenToken>;
+def TuplePatternSyntax : BindablePatternSyntax {
+  Layout OpenParen = Layout<LeftParenTokenSyntax>;
   Layout Elements = Layout<TuplePatternElementListSyntax>;
-  Layout CloseParen = Layout<RightParenToken>;
+  Layout CloseParen = Layout<RightParenTokenSyntax>;
   Layout TypeAnnotation = OptionalLayout<TypeAnnotationSyntax>;
 }
-def OptionalPatternSyntax : BindablePattern {
-  Layout Identifier = Layout<IdentifierToken>;
-  Layout QuestionMark = Layout<QuestionMarkPostfixToken>;
+def OptionalPatternSyntax : BindablePatternSyntax {
+  Layout Identifier = Layout<IdentifierTokenSyntax>;
+  Layout QuestionMark = Layout<QuestionMarkPostfixTokenSyntax>;
 }
-def AsTypePatternSyntax : BindablePattern {
-  Layout Pattern = Layout<AnyBindablePattern>;
-  Layout As = Layout<AsToken>;
-  Layout Type = Layout<AnyType>;
+def AsTypePatternSyntax : BindablePatternSyntax {
+  Layout PatternSyntax = Layout<AnyBindablePatternSyntax>;
+  Layout As = Layout<AsTokenSyntax>;
+  Layout Type = Layout<AnyTypeSyntax>;
 }
-def EnumCasePatternSyntax : Pattern {
+def EnumCasePatternSyntax : PatternSyntax {
   Layout TypeIdentifier = OptionalLayout<TypeIdentifierSyntax>;
-  Layout Period = Layout<TokenChoice<[PeriodToken, PeriodPrefixToken]>>;
-  Layout CaseName = Layout<IdentifierToken>;
+  Layout Period = Layout<TokenChoice<[PeriodTokenSyntax, PeriodPrefixTokenSyntax]>>;
+  Layout CaseName = Layout<IdentifierTokenSyntax>;
   Layout AssociatedTuple = OptionalLayout<TuplePatternSyntax>;
 }
-def IsTypePattern : Pattern {
-  Layout Is = Layout<IsToken>;
-  Layout Type = Layout<AnyType>;
+def IsTypePatternSyntax : PatternSyntax {
+  Layout Is = Layout<IsTokenSyntax>;
+  Layout Type = Layout<AnyTypeSyntax>;
 }
-def ValueBindingPatternSyntax : Pattern {
-  Layout LetOrVar = Layout<TokenChoice<[LetToken, VarToken]>>;
-  Layout ValuePattern = Layout<AnyBindablePattern>;
+def ValueBindingPatternSyntax : PatternSyntax {
+  Layout LetOrVar = Layout<TokenChoice<[LetTokenSyntax, VarTokenSyntax]>>;
+  Layout ValuePatternSyntax = Layout<AnyBindablePatternSyntax>;
 }
-def ExpressionPatternSyntax : Pattern {
-  Layout Expression = Layout<AnyExpr>;
+def ExpressionPatternSyntax : PatternSyntax {
+  Layout Expression = Layout<AnyExprSyntax>;
 }
 
