@@ -235,8 +235,8 @@ static bool categoryIsInSyntaxHierarchy() {
 }
 
 static bool shouldPrintDef(const Record &Rec) {
-  auto Any = std::string { "Any" } + options::Category;
-  if (Rec.getName() == Any) {
+  //auto Any = std::string { "Any" } + options::Category;
+  if (Rec.getName().startswith("Any")) {
     return false;
   }
   if (Rec.isAnonymous()) {
@@ -272,9 +272,9 @@ static void printTokenAssertion(std::string VariableName,
     OS << "  assert(" << VariableName << "->isToken());\n";
   } else {
     if (isIdentifier(TokenRec)) {
-      OS << "  assert(" << VariableName << "->getTokenKind() == tok::" << Kind << ");\n";
+      OS << "  assert(cast<RawTokenSyntax>(" << VariableName << ")->getTokenKind() == tok::" << Kind << ");\n";
     } else {
-      OS << "  syntax_assert_token_is(" << VariableName << ", tok::" << Kind << ", \"" << getTokenSpelling(TokenRec) << "\");\n";
+      OS << "  syntax_assert_token_is(cast<RawTokenSyntax>(" << VariableName << "), tok::" << Kind << ", \"" << getTokenSpelling(TokenRec) << "\");\n";
     }
   }
 }
@@ -299,6 +299,8 @@ static void printIncludesOfImplementation(raw_ostream &OS) {
   OS <<
   "#include \"swift/Syntax/RawSyntax.h\"\n"
   "#include \"swift/Syntax/SyntaxFactory.h\"\n"
+  "#include \"swift/Syntax/Syntax.h\"\n"
+  "#include \"swift/Syntax/SyntaxData.h\"\n"
   "#include \"swift/Syntax/" << options::Category;
   OS << ".h\"\n";
 
@@ -338,38 +340,63 @@ static void printIncludesOfInterface(raw_ostream &OS) {
   "#include \"swift/Syntax/TokenSyntax.h\"\n\n";
 }
 
+static void printForwardDeclarationsOfInterface(raw_ostream &OS) {
+  if (categoryIsInSyntaxHierarchy()) {
+    OS << "\n";
+    auto Categories = SyntaxCategories;
+    Categories.erase(getGeneratingCategoryRecord());
+
+    // Add the common categories.
+    for (const auto &NameAndRec : AllRecords->getDefs()) {
+      const auto *Rec = NameAndRec.second.get();
+      if (Rec->isAnonymous()) {
+        continue;
+      }
+
+      if (auto CategoryField = Rec->getValue("Category")) {
+        auto CategoryName = CategoryField->getValue()->getAsUnquotedString();
+        if (CategoryName == "CommonSyntax") {
+          Categories.insert(Rec);
+        }
+      }
+    }
+
+    for (const auto *Category : Categories) {
+      // Types defined in this category's header file don't need to be
+      // forward-declared, they're already in the header!
+      if (auto CategoryField = Category->getValue("Category")) {
+        auto CategoryName = CategoryField->getValue()->getAsUnquotedString();
+        if (CategoryName == options::Category) {
+          continue;
+        }
+      }
+
+      // Syntax and SyntaxData always come in through headers.
+      if (Category->getName() == "Syntax" ||
+          Category->getName() == "SyntaxData") {
+        continue;
+      }
+
+      // TokenSyntax comes in through headers.
+      if (Category->getName() == "TokenSyntax" ||
+          Category->getName() == "TokenSyntaxData") {
+        continue;
+      }
+
+      OS << "class " << Category->getName() << ";\n";
+      OS << "class " << Category->getName() << "Data;\n";
+    }
+    OS << "\n";
+  }
+}
+
+
 struct Namespaces {
   raw_ostream &OS;
   Namespaces(raw_ostream &OS) : OS(OS) {
     OS << "namespace swift {\n";
 
-    if (categoryIsInSyntaxHierarchy()) {
-      // We need to print forward declarations of the other kinds of
-      // syntax nodes.
-      OS << "\n";
-      auto Categories = SyntaxCategories;
-      Categories.erase(getGeneratingCategoryRecord());
-
-      // Add the common categories.
-      for (const auto &NameAndRec : AllRecords->getDefs()) {
-        const auto *Rec = NameAndRec.second.get();
-        if (Rec->isAnonymous()) {
-          continue;
-        }
-        if (auto CategoryField = Rec->getValue("Category")) {
-          auto CategoryName = CategoryField->getValue()->getAsUnquotedString();
-          if (CategoryName == "CommonSyntax") {
-            Categories.insert(Rec);
-          }
-        }
-      }
-
-      for (const auto *Category : Categories) {
-        OS << "class " << Category->getName() << ";\n";
-        OS << "class " << Category->getName() << "Data;\n";
-      }
-      OS << "\n";
-    }
+    printForwardDeclarationsOfInterface(OS);
 
     OS << "namespace syntax {\n";
   }
@@ -391,6 +418,7 @@ static bool printSyntaxInterface(const Record &Node, raw_ostream &OS) {
   OS << "class " << ClassName << " : public Syntax {\n"
   "  friend struct SyntaxFactory;\n"
   "  friend class " << DataClassName << ";\n"
+  "  friend class Syntax;\n"
   "  friend class SyntaxData;\n"
   "\n"
   "  using DataType = " << DataClassName << ";\n"
@@ -430,15 +458,26 @@ static bool printSyntaxInterface(const Record &Node, raw_ostream &OS) {
 
 static bool printSyntaxDataInterface(const Record &Node, raw_ostream &OS) {
   auto ClassName = Node.getName();
-  auto SuperclassName = Node.getSuperClasses().front().first->getName();
+  auto SuperclassName = Node.getSuperClasses().back().first->getName();
   auto Kind = stripSyntaxSuffix(ClassName);
   auto DataClassName = ClassName + "Data";
   auto DataSuperclassName = SuperclassName + "Data";
+  auto Final = isBaseSyntaxClass(Node) ? StringRef("") : StringRef(" final");
 
-  OS << "class " << DataClassName << " final : public " << DataSuperclassName << " {\n"
+  OS << "class " << DataClassName << Final << " : public " << DataSuperclassName << " {\n"
   "  friend class SyntaxData;\n"
   "  friend struct SyntaxFactory;\n"
-  "\n" <<
+  "  friend class " << ClassName << ";\n\n";
+
+  // Private, cached RC<*SyntaxData> members
+  for (const auto Child : getChildrenOf(Node)) {
+    auto ChildType = getLayoutNodeRecord(Child);
+    auto ChildTypeName = getChildTypeName(ChildType) + "Data";
+    OS << "  RC<" << ChildTypeName << "> Cached" << Child.getName() << ";\n";
+  }
+
+  OS <<
+  "\n"
   "  " << DataClassName << "(RC<RawSyntax> Raw, const SyntaxData *Parent = nullptr, CursorIndex IndexInParent = 0);\n"
   "\n"
   "  static RC<" << DataClassName << "> make(RC<RawSyntax> Raw, const SyntaxData *Parent = nullptr, CursorIndex IndexInParent = 0);\n"
@@ -494,26 +533,23 @@ static bool printSyntaxImplementation(const Record &Node, raw_ostream &OS) {
     // Getter
     OS << ChildTypeName << "\n" <<
     ClassName << "::get" << ChildName << "() const {\n"
-    "  auto RawChild = getRaw()->getChild(Cursor::" << ChildName << ";\n"
-    "  if (RawChild->isMissing()) {\n"
-    "    return llvm::None;\n"
-    "  }\n"
+    "  auto RawChild = getRaw()->getChild(Cursor::" << ChildName << ");\n"
     "  auto *MyData = getUnsafeData<" << ClassName << ">();\n"
     "  auto &ChildPtr = *reinterpret_cast<std::atomic<uintptr_t>*>(\n"
     "    &MyData->Cached" << ChildName << ");\n"
     "  SyntaxData::realizeSyntaxNode<" << ChildTypeName << ">(ChildPtr, RawChild, MyData, cursorIndex(Cursor::" << ChildName << "));\n"
-    "  return " << ClassName << "{ Root, MyData->Cached" << ChildName << ".get() };\n"
+    "  return " << ChildTypeName << " { Root, MyData->Cached" << ChildName << ".get() };\n"
     "}\n\n";
 
     // Setter
-    auto NewChildArg = "New" + ChildName;
-    OS << ClassName << "\n" << ClassName << "::with" << ChildName << "(" << ChildTypeName << " " << NewChildArg << ") const {\n";
+    auto NewChildParam = "New" + ChildName;
+    OS << ClassName << "\n" << ClassName << "::with" << ChildName << "(" << ChildTypeName << " " << NewChildParam << ") const {\n";
+
+    auto RawNewChild = NewChildParam + ".getRaw()";
     if (isToken(ChildType)) {
-      printTokenAssertion(NewChildArg.str(), ChildType, OS);
-      OS << "  return Data->replaceChild<" << ClassName << ">(" << NewChildArg << ", " << "Cursor::" << ChildName << ");\n";
-    } else {
-      OS << "  return Data->replaceChild<" << ClassName << ">(" << NewChildArg << "->getRaw(), " << "Cursor::" << ChildName << ");\n";
+      printTokenAssertion(RawNewChild.str(), ChildType, OS);
     }
+    OS << "  return Data->replaceChild<" << ClassName << ">(" << RawNewChild << ", " << "Cursor::" << ChildName << ");\n";
     OS << "}\n\n";
   }
 
@@ -535,7 +571,7 @@ static bool printSyntaxDataImplementation(const Record &Node, raw_ostream &OS) {
   for (const auto Child : getChildrenOf(Node)) {
     auto ChildName = Child.getName();
     auto ChildType = getLayoutNodeRecord(Child);
-    auto ChildVariable = "Raw->getChild(Cursor::" + ChildName + ")";
+    auto ChildVariable = "Raw->getChild(" + ClassName + "::Cursor::" + ChildName + ")";
     if (isToken(ChildType)) {
       printTokenAssertion(ChildVariable.str(), ChildType, OS);
     } else {
@@ -563,7 +599,7 @@ static bool printSyntaxDataImplementation(const Record &Node, raw_ostream &OS) {
       auto ChildRec = getLayoutNodeRecord(Child);
       auto TokenKind = ChildRec.getValueAsString("Kind");
       auto TokenSpelling = ChildRec.getValueAsString("Spelling");
-      OS << "    TokenSyntax::missingToken(tok::" << TokenKind << ", \"" << TokenSpelling << "\"),\n";
+      OS << "    RawTokenSyntax::missingToken(tok::" << TokenKind << ", \"" << TokenSpelling << "\"),\n";
     } else {
       auto ChildKind = getMissingSyntaxKind(Child);
       OS << "    RawSyntax::missing(SyntaxKind::" << ChildKind << "),\n";
