@@ -1,4 +1,4 @@
-
+/*
 def TryOperatorSyntax : Syntax {
   Layout Try = Layout<TryTokenSyntax>;
   Layout QuestionOrExclamationMark = OptionalLayout<TokenChoice<[QuestionMarkPostfixTokenSyntax, ExclamationMarkTokenSyntax]>>;
@@ -29,9 +29,8 @@ def FloatLiteralExprSyntax : LiteralExprSyntax {
   Layout Sign = OptionalLayout<PrefixOperatorTokenSyntax>; // - or +
   Layout FloatingDigits = Layout<FloatingLiteralTokenSyntax>;
 }
-def StringLiteralExprSyntax : LiteralExprSyntax {
-  Layout String
-}
+
+// TODO: String Literal
 
 class PrefixExprSyntax : ExprSyntax;
 def AnyPrefixExprSyntax : PrefixExprSyntax;
@@ -45,7 +44,8 @@ def PrefixOperatorExprSyntax : PrefixExprSyntax {
   Layout PostfixExpression = Layout<AnyPostfixExprSyntax>;
 }
 
-def BinaryExprSyntax:
+// def BinaryExprSyntax: TODO
+
 def BinaryExprListSyntax:
 def ExpressionSyntax : ExprSyntax {
   Layout Try = OptionalLayout<TryOperatorSyntax>;
@@ -58,3 +58,4 @@ def ExpressionListElement : Syntax {
   Layout Comma = Layout<CommaToken>;
 }
 def ExpressionListSyntax : SyntaxCollection<ExpressionListElement>;
+*/
