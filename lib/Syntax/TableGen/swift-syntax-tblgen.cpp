@@ -462,9 +462,8 @@ static bool printSyntaxDataInterface(const Record &Node, raw_ostream &OS) {
   auto Kind = stripSyntaxSuffix(ClassName);
   auto DataClassName = ClassName + "Data";
   auto DataSuperclassName = SuperclassName + "Data";
-  auto Final = isBaseSyntaxClass(Node) ? StringRef("") : StringRef(" final");
 
-  OS << "class " << DataClassName << Final << " : public " << DataSuperclassName << " {\n"
+  OS << "class " << DataClassName << " : public " << DataSuperclassName << " {\n"
   "  friend class SyntaxData;\n"
   "  friend struct SyntaxFactory;\n"
   "  friend class " << ClassName << ";\n\n";
