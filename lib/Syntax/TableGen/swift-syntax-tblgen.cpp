@@ -566,7 +566,7 @@ static bool printSyntaxDataImplementation(const Record &Node, raw_ostream &OS) {
   // Constructor
   OS << DataClassName << "::" << DataClassName << "(RC<RawSyntax> Raw, const SyntaxData *Data, const CursorIndex IndexInParent)\n"
   "  : " << DataSuperclassName << "(Raw, Data, IndexInParent) {\n"
-  "  assert(Raw->getKind() == SyntaxKind::" << Kind << ");\n"
+  "  assert(Raw->Kind == SyntaxKind::" << Kind << ");\n"
   "  assert(Raw->Layout.size() == " << getChildrenOf(Node).size() << ");\n";
   for (const auto Child : getChildrenOf(Node)) {
     auto ChildName = Child.getName();
