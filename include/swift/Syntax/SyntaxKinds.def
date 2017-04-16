@@ -76,6 +76,9 @@ SYNTAX_RANGE(Type, MissingType, FunctionType)
 
 // Statements
 SYNTAX(StmtList, Syntax)
+SYNTAX(ConditionalCompilationStmt, StmtSyntax)
+SYNTAX(DeclarationStmt, StmtSyntax)
+SYNTAX(ExpressionStmt, StmtSyntax)
 
 ABSTRACT_SYNTAX(StmtSyntax, Syntax)
   SYNTAX(UnknownStmt, StmtSyntax)

@@ -15,42 +15,42 @@ class SyntaxCollection<Syntax element> : Syntax {
   Syntax Element = element;
 }
 
-class Stmt : Syntax {
-  let Category = "Stmt";
+class StmtSyntax : Syntax {
+  let Category = "StmtSyntax";
 }
-def AnyStmt: Stmt;
+def AnyStmtSyntax: StmtSyntax;
 
-class Expr : Syntax {
-  let Category = "Expr";
+class ExprSyntax : Syntax {
+  let Category = "ExprSyntax";
 }
-def AnyExpr : Expr;
+def AnyExprSyntax : ExprSyntax;
 
-class Decl : Syntax {
-  let Category = "Decl";
+class DeclSyntax : Syntax {
+  let Category = "DeclSyntax";
 }
-def AnyDecl : Decl;
+def AnyDeclSyntax : DeclSyntax;
 
-class Pattern : Syntax {
-  let Category = "Pattern";
+class PatternSyntax : Syntax {
+  let Category = "PatternSyntax";
 }
-def AnyPattern : Pattern;
+def AnyPatternSyntax : PatternSyntax;
 
-class Type : Syntax {
-  let Category = "Type";
+class TypeSyntax : Syntax {
+  let Category = "TypeSyntax";
 }
-def AnyType : Type;
+def AnyTypeSyntax : TypeSyntax;
 
-class Attribute : Syntax;
+class AttributeSyntax : Syntax;
 
-class Token<string spelling, string kind> : Syntax {
+class TokenSyntax<string spelling, string kind> : Syntax {
   string Spelling = spelling;
   string Kind = kind;
-  let Category = "Token";
+  let Category = "TokenSyntax";
 }
 // FIXME: Use a list of possible tokens?
-def AnyToken : Token<"", "">;
+def AnyTokenSyntax : TokenSyntax<"", "">;
 
-class TokenChoice<list<Token> choices> : Syntax {
+class TokenChoice<list<TokenSyntax> choices> : Syntax {
   list<Token> Choices = choices;
 }
 

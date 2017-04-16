@@ -7,19 +7,19 @@ def AttributeArgumentListSyntax : SyntaxCollection<AnyAttributeArgumentListEleme
   let Category = "Attribute";
 }
 
-def BalancedTokensSyntax : AttributeArgumentListElement, Syntax {
-  Layout LeftMatch = Layout<AnyToken>;
-  Layout BalancedTokens = Layout<AttributeArgumentListSyntax>;
-  Layout RightMatch = Layout<AnyToken>;
+def BalancedTokenSyntaxsSyntax : AttributeArgumentListElement, Syntax {
+  Layout LeftMatch = Layout<AnyTokenSyntax>;
+  Layout BalancedTokenSyntaxs = Layout<AttributeArgumentListSyntax>;
+  Layout RightMatch = Layout<AnyTokenSyntax>;
 }
-// FIXME: AnyToken -> blacklist ()[]{}
-def TokenListSyntax : AttributeArgumentListElement, SyntaxCollection<AnyToken>;
+// FIXME: AnyTokenSyntax -> blacklist ()[]{}
+def TokenSyntaxListSyntax : AttributeArgumentListElement, SyntaxCollection<AnyTokenSyntax>;
 def AttributeSyntax : Syntax {
-  Layout AtSign = Layout<AtSignToken>;
-  Layout AttributeName = Layout<IdentifierToken>;
-  Layout OpenParen = Layout<LeftParenToken>;
+  Layout AtSign = Layout<AtSignTokenSyntax>;
+  Layout AttributeName = Layout<IdentifierTokenSyntax>;
+  Layout OpenParen = Layout<LeftParenTokenSyntax>;
   Layout AttributeArguments = Layout<AttributeArgumentListSyntax>;
-  Layout CloseParen = Layout<RightParenToken>;
+  Layout CloseParen = Layout<RightParenTokenSyntax>;
 }
 
 def AttributeListSyntax : SyntaxCollection<AttributeSyntax> {

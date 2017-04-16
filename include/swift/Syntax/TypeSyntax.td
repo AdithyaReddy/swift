@@ -1,90 +1,90 @@
 def TypeAnnotationSyntax : Syntax {
   Layout Attributes = Layout<AttributeListSyntax>;
-  Layout InOut = Layout<InoutToken>;
-  Layout Type = Layout<AnyType>;
+  Layout InOut = Layout<InoutTokenSyntax>;
+  Layout Type = Layout<AnyTypeSyntax>;
 }
 
 def GenericArgumentClauseElementSyntax : Syntax {
-  Layout GenericArgument = Layout<AnyType>;
-  Layout Comma = Layout<CommaToken>;
+  Layout GenericArgument = Layout<AnyTypeSyntax>;
+  Layout Comma = Layout<CommaTokenSyntax>;
 }
 def GenericArgumentClauseSyntax : SyntaxCollection<GenericArgumentClauseElementSyntax>;
 def TypeIdentifierSyntax : Syntax {
-  Layout TypeName = Layout<IdentifierToken>;
+  Layout TypeName = Layout<IdentifierTokenSyntax>;
   Layout GenericArgumentClause = Layout<GenericArgumentClauseSyntax>;
-  Layout Period = Layout<PeriodToken>;
+  Layout Period = Layout<PeriodTokenSyntax>;
   Layout TypeIdentifier = Layout<TypeIdentifierSyntax>;
 }
 
 def TupleTypeElementSyntax : Syntax {
-  Layout Label = Layout<IdentifierToken>;
-  Layout Colon = Layout<ColonToken>;
+  Layout Label = Layout<IdentifierTokenSyntax>;
+  Layout Colon = Layout<ColonTokenSyntax>;
   Layout TypeAttributes = Layout<SyntaxCollection<AttributeSyntax>>;
-  Layout InOut = Layout<InoutToken>;
-  Layout Type = Layout<AnyType>;
-  Layout Comma = Layout<CommaToken>;
+  Layout InOut = Layout<InoutTokenSyntax>;
+  Layout Type = Layout<AnyTypeSyntax>;
+  Layout Comma = Layout<CommaTokenSyntax>;
 }
 def TupleTypeElementListSyntax : SyntaxCollection<TupleTypeElementSyntax>;
-def TupleTypeSyntax : Type {
-  Layout LeftParen = Layout<LeftParenToken>;
+def TupleTypeSyntax : TypeSyntax {
+  Layout LeftParen = Layout<LeftParenTokenSyntax>;
   Layout ElementList = Layout<TupleTypeElementListSyntax>;
-  Layout RightParen = Layout<RightParenToken>;
+  Layout RightParen = Layout<RightParenTokenSyntax>;
 }
 
 def FunctionTypeArgumentSyntax : Syntax {
-  Layout ExternalParameterName = Layout<IdentifierToken>;
-  Layout LocalParameterName = Layout<IdentifierToken>;
-  Layout Colon = Layout<ColonToken>;
+  Layout ExternalParameterName = Layout<IdentifierTokenSyntax>;
+  Layout LocalParameterName = Layout<IdentifierTokenSyntax>;
+  Layout Colon = Layout<ColonTokenSyntax>;
   Layout TypeAttributes = Layout<SyntaxCollection<AttributeSyntax>>;
-  Layout Inout = Layout<InoutToken>;
-  Layout Type = Layout<AnyType>;
+  Layout Inout = Layout<InoutTokenSyntax>;
+  Layout Type = Layout<AnyTypeSyntax>;
 }
 def FunctionTypeArgumentListSyntax : SyntaxCollection<FunctionTypeArgumentSyntax>;
-def FunctionTypeSyntax : Type {
+def FunctionTypeSyntax : TypeSyntax {
   Layout TypeAttributes = Layout<AttributeListSyntax>;
-  Layout OpenParen = Layout<LeftParenToken>;
+  Layout OpenParen = Layout<LeftParenTokenSyntax>;
   Layout ArgumentList = Layout<FunctionTypeArgumentListSyntax>;
-  Layout CloseParen = Layout<RightParenToken>;
-  Layout ThrowsOrRethrows = Layout<AnyToken>;
-  Layout Arrow = Layout<ArrowToken>;
-  Layout ReturnType = Layout<AnyType>;
+  Layout CloseParen = Layout<RightParenTokenSyntax>;
+  Layout ThrowsOrRethrows = Layout<AnyTokenSyntax>;
+  Layout Arrow = Layout<ArrowTokenSyntax>;
+  Layout ReturnType = Layout<AnyTypeSyntax>;
 }
 
-def ArrayTypeSyntax : Type {
-  Layout LeftBracket = Layout<LeftSquareToken>;
-  Layout ElementType = Layout<AnyType>;
-  Layout RightBracket = Layout<RightSquareToken>;
+def ArrayTypeSyntax : TypeSyntax {
+  Layout LeftBracket = Layout<LeftSquareTokenSyntax>;
+  Layout ElementType = Layout<AnyTypeSyntax>;
+  Layout RightBracket = Layout<RightSquareTokenSyntax>;
 }
 
-def DictionaryTypeSyntax : Type {
-  Layout LeftSquare = Layout<LeftSquareToken>;
-  Layout KeyType = Layout<AnyType>;
-  Layout Colon = Layout<ColonToken>;
-  Layout ValueType = Layout<AnyType>;
-  Layout RightSquare = Layout<RightSquareToken>;
+def DictionaryTypeSyntax : TypeSyntax {
+  Layout LeftSquare = Layout<LeftSquareTokenSyntax>;
+  Layout KeyType = Layout<AnyTypeSyntax>;
+  Layout Colon = Layout<ColonTokenSyntax>;
+  Layout ValueType = Layout<AnyTypeSyntax>;
+  Layout RightSquare = Layout<RightSquareTokenSyntax>;
 }
 
-def OptionalTypeSyntax : Type {
-  Layout ValueType = Layout<AnyType>;
-  Layout QuestionMark = Layout<QuestionMarkPostfixToken>;
+def OptionalTypeSyntax : TypeSyntax {
+  Layout ValueType = Layout<AnyTypeSyntax>;
+  Layout QuestionMark = Layout<QuestionMarkPostfixTokenSyntax>;
 }
 
-def ImplicityUnwrappedOptionalTypeSyntax : Type {
-  Layout ValueType = Layout<AnyType>;
-  Layout ExclamationMark = Layout<ExclamationMarkToken>;
+def ImplicitlyUnwrappedOptionalTypeSyntax : TypeSyntax {
+  Layout ValueType = Layout<AnyTypeSyntax>;
+  Layout ExclamationMark = Layout<ExclamationMarkTokenSyntax>;
 }
 
 def ProtocolCompositionElementSyntax : Syntax {
   Layout ProtocolType = Layout<TypeIdentifierSyntax>;
-  Layout Ampersand = Layout<AmpersandToken>;
+  Layout Ampersand = Layout<AmpersandTokenSyntax>;
 }
 
 def ProtocolCompositionTypeSyntax : SyntaxCollection<ProtocolCompositionElementSyntax>;
 
-def MetatypeTypeSyntax : Type {
-  Layout TypeValue = Layout<AnyType>;
-  Layout Period = Layout<PeriodToken>;
+def MetatypeTypeSyntax : TypeSyntax {
+  Layout TypeValue = Layout<AnyTypeSyntax>;
+  Layout Period = Layout<PeriodTokenSyntax>;
   // FIXME: Add set of allowable values to assert
-  Layout TypeOrProtocol = Layout<IdentifierToken>;
+  Layout TypeOrProtocol = Layout<IdentifierTokenSyntax>;
 }
 
