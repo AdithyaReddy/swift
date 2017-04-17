@@ -137,7 +137,6 @@ static const Record &getLayoutNodeRecord(const RecordVal Child) {
 }
 
 static const Record *getBaseSyntaxCategory(const Record &Child) {
-  assert(canBeAnyOfSyntaxCategory(Child));
   for (const auto Super : Child.getSuperClasses()) {
     if (isBaseSyntaxClass(*Super.first)) {
       return Super.first;
@@ -228,24 +227,11 @@ static bool categoryIsInSyntaxHierarchy() {
   case Category::TypeSyntax:
   case Category::GenericSyntax:
   case Category::AttributeSyntax:
+  case Category::CommonSyntax:
     return true;
   default:
     return false;
   }
-}
-
-static bool shouldPrintDef(const Record &Rec) {
-  //auto Any = std::string { "Any" } + options::Category;
-  if (Rec.getName().startswith("Any")) {
-    return false;
-  }
-  if (Rec.isAnonymous()) {
-    return false;
-  }
-  if (Rec.getValueAsString("Category") != options::Category) {
-    return false;
-  }
-  return true;
 }
 
 static std::vector<RecordVal> getChildrenOf(const Record &Node) {
@@ -261,6 +247,51 @@ static std::vector<RecordVal> getChildrenOf(const Record &Node) {
   }
 
   return Children;
+}
+
+/// Returns the records for a category that we should print code for.
+static std::vector<const Record *>
+getRecordsForCategory(const std::string &Category) {
+  std::vector<const Record *> Records;
+  for (const auto &NameAndRec : AllRecords->getDefs()) {
+    if (NameAndRec.second->getName().startswith("Any")) {
+      continue;
+    }
+    if (NameAndRec.second->isAnonymous()) {
+      continue;
+    }
+    if (NameAndRec.second->getValueAsString("Category") != options::Category) {
+      continue;
+    }
+    Records.push_back(NameAndRec.second.get());
+  }
+  return Records;
+}
+
+/// Returns the records referenced by this category's records, used
+/// for printing forward declarations, for example.
+static std::set<const Record *>
+getRecordsReferencedByCategory(const std::string &Category) {
+  std::set<const Record *> ReferencedRecords;
+  auto Nodes = getRecordsForCategory(Category);
+  for (const auto *Node : Nodes) {
+    for (const auto Child : getChildrenOf(*Node)) {
+      const auto &ChildType = getLayoutNodeRecord(Child);
+      if (isToken(ChildType)) {
+        continue;
+      }
+      if (canBeAnyOfSyntaxCategory(ChildType)) {
+        if (const auto *Base = getBaseSyntaxCategory(ChildType)) {
+          ReferencedRecords.insert(Base);
+          continue;
+        }
+      }
+      if (std::find(Nodes.begin(), Nodes.end(), &ChildType) == Nodes.end()) {
+        ReferencedRecords.insert(&ChildType);
+      }
+    }
+  }
+  return ReferencedRecords;
 }
 
 static void printTokenAssertion(std::string VariableName,
@@ -301,8 +332,21 @@ static void printIncludesOfImplementation(raw_ostream &OS) {
   "#include \"swift/Syntax/SyntaxFactory.h\"\n"
   "#include \"swift/Syntax/Syntax.h\"\n"
   "#include \"swift/Syntax/SyntaxData.h\"\n"
+  "#include \"swift/Syntax/CommonSyntax.h\"\n"
   "#include \"swift/Syntax/" << options::Category;
   OS << ".h\"\n";
+
+  std::set<const Record *> ReferencedCategories;
+  for (const auto *ReferencedRec : getRecordsReferencedByCategory(options::Category)) {
+    if (isBaseSyntaxClass(*ReferencedRec)) {
+      ReferencedCategories.insert(ReferencedRec);
+    } else if (const auto *Base = getBaseSyntaxCategory(*ReferencedRec)) {
+      ReferencedCategories.insert(Base);
+    }
+  }
+  for (const auto *ReferencedCategory : ReferencedCategories) {
+    OS << "#include \"swift/Syntax/" << ReferencedCategory->getName() << ".h\"\n";
+  }
 
   OS <<
   "using namespace swift;\n"
@@ -337,6 +381,7 @@ static void printIncludesOfInterface(raw_ostream &OS) {
   "#include \"swift/Syntax/References.h\"\n"
   "#include \"swift/Syntax/SyntaxData.h\"\n"
   "#include \"swift/Syntax/Syntax.h\"\n"
+  "#include \"swift/Syntax/SyntaxCollection.h\"\n"
   "#include \"swift/Syntax/TokenSyntax.h\"\n\n";
 }
 
@@ -361,10 +406,11 @@ static void printForwardDeclarationsOfInterface(raw_ostream &OS) {
       }
     }
 
-    for (const auto *Category : Categories) {
+    auto ReferencedRecords = getRecordsReferencedByCategory(options::Category);
+    for (const auto *ReferencedRec : ReferencedRecords) {
       // Types defined in this category's header file don't need to be
       // forward-declared, they're already in the header!
-      if (auto CategoryField = Category->getValue("Category")) {
+      if (auto CategoryField = ReferencedRec->getValue("Category")) {
         auto CategoryName = CategoryField->getValue()->getAsUnquotedString();
         if (CategoryName == options::Category) {
           continue;
@@ -372,19 +418,19 @@ static void printForwardDeclarationsOfInterface(raw_ostream &OS) {
       }
 
       // Syntax and SyntaxData always come in through headers.
-      if (Category->getName() == "Syntax" ||
-          Category->getName() == "SyntaxData") {
+      if (ReferencedRec->getName() == "Syntax" ||
+          ReferencedRec->getName() == "SyntaxData") {
         continue;
       }
 
       // TokenSyntax comes in through headers.
-      if (Category->getName() == "TokenSyntax" ||
-          Category->getName() == "TokenSyntaxData") {
+      if (ReferencedRec->getName() == "TokenSyntax" ||
+          ReferencedRec->getName() == "TokenSyntaxData") {
         continue;
       }
 
-      OS << "class " << Category->getName() << ";\n";
-      OS << "class " << Category->getName() << "Data;\n";
+      OS << "class " << ReferencedRec->getName() << ";\n";
+      OS << "class " << ReferencedRec->getName() << "Data;\n";
     }
     OS << "\n";
   }
@@ -395,10 +441,8 @@ struct Namespaces {
   raw_ostream &OS;
   Namespaces(raw_ostream &OS) : OS(OS) {
     OS << "namespace swift {\n";
-
-    printForwardDeclarationsOfInterface(OS);
-
     OS << "namespace syntax {\n";
+    printForwardDeclarationsOfInterface(OS);
   }
 
   ~Namespaces() {
@@ -410,17 +454,34 @@ struct Namespaces {
 #pragma mark - Syntax
 
 static bool printSyntaxInterface(const Record &Node, raw_ostream &OS) {
-  auto ClassName = Node.getName();
-  auto Kind = stripSyntaxSuffix(ClassName);
-  auto SuperclassName = Node.getSuperClasses().front().first->getName();
+  auto ClassName = Node.getName().str();
+  auto Kind = stripSyntaxSuffix(ClassName).str();
+  llvm::errs() << ClassName << "supers:\n";
+  for (const auto Super : Node.getSuperClasses()) {
+    llvm::errs() << Super.first->getName() << "\n";
+  }
+  auto SuperclassName = Node.getSuperClasses().back().first->getName().str();
   auto DataClassName = ClassName + "Data";
 
-  OS << "class " << ClassName << " : public Syntax {\n"
+  auto Superclass = SuperclassName;
+
+  if (SuperclassName == "SyntaxCollection") {
+    auto ElementChild = cast<DefInit>(Node.getValue("Element")->getValue());
+    auto TemplateArgs = std::string("<SyntaxKind::") + Kind + ", " + ElementChild->getDef()->getName().str() + std::string(">");
+    Superclass += TemplateArgs;
+  }
+
+  OS << "class " << ClassName << " : public " << Superclass << " {\n"
   "  friend struct SyntaxFactory;\n"
   "  friend class " << DataClassName << ";\n"
   "  friend class Syntax;\n"
   "  friend class SyntaxData;\n"
-  "\n"
+  "\n";
+
+  if (isBaseSyntaxClass(Node)) {
+    OS << "public:\n";
+  }
+  OS <<
   "  using DataType = " << DataClassName << ";\n"
   "\n";
 
@@ -433,7 +494,7 @@ static bool printSyntaxInterface(const Record &Node, raw_ostream &OS) {
   }
 
   OS <<
-  "  " << ClassName << "(RC<SyntaxData> Root, const " << DataClassName << "* Data)\n"
+  "  " << ClassName << "(RC<SyntaxData> Root, const DataType* Data)\n"
   "    : " << SuperclassName << "(Root, Data) {}\n"
   "public:\n";
   for (const auto Child : getChildrenOf(Node)) {
@@ -459,9 +520,16 @@ static bool printSyntaxInterface(const Record &Node, raw_ostream &OS) {
 static bool printSyntaxDataInterface(const Record &Node, raw_ostream &OS) {
   auto ClassName = Node.getName();
   auto SuperclassName = Node.getSuperClasses().back().first->getName();
-  auto Kind = stripSyntaxSuffix(ClassName);
+  auto Kind = stripSyntaxSuffix(ClassName).str();
   auto DataClassName = ClassName + "Data";
   auto DataSuperclassName = SuperclassName + "Data";
+
+  if (SuperclassName == "SyntaxCollection") {
+    auto ElementChild = cast<DefInit>(Node.getValue("Element")->getValue());
+    auto TemplateArgs = std::string("<SyntaxKind::") + Kind + ", " + ElementChild->getDef()->getName().str() + std::string(">");
+    OS << "using " << DataClassName << " = " << DataSuperclassName << TemplateArgs << ";\n\n";
+    return false;
+  }
 
   OS << "class " << DataClassName << " : public " << DataSuperclassName << " {\n"
   "  friend class SyntaxData;\n"
@@ -473,6 +541,10 @@ static bool printSyntaxDataInterface(const Record &Node, raw_ostream &OS) {
     auto ChildType = getLayoutNodeRecord(Child);
     auto ChildTypeName = getChildTypeName(ChildType) + "Data";
     OS << "  RC<" << ChildTypeName << "> Cached" << Child.getName() << ";\n";
+  }
+
+  if (isBaseSyntaxClass(Node)) {
+    OS << "protected:\n";
   }
 
   OS <<
@@ -509,13 +581,10 @@ static bool printSyntaxInterfaces(raw_ostream &OS) {
     printSyntaxInterface(*CategoryRecord, OS);
   }
 
-  const auto &Nodes = AllRecords->getDefs();
-  for (const auto &Node : Nodes) {
-    if (!shouldPrintDef(*Node.second)) {
-      continue;
-    }
-    printSyntaxDataInterface(*Node.second, OS);
-    printSyntaxInterface(*Node.second, OS);
+  const auto Nodes = getRecordsForCategory(options::Category);
+  for (const auto *Node : Nodes) {
+    printSyntaxDataInterface(*Node, OS);
+    printSyntaxInterface(*Node, OS);
   }
 
   return false;
@@ -612,16 +681,13 @@ static bool printSyntaxDataImplementation(const Record &Node, raw_ostream &OS) {
 }
 
 static bool printSyntaxImplementations(raw_ostream &OS) {
-  const auto &Nodes = AllRecords->getDefs();
-  for (const auto &Node : Nodes) {
-    if (!shouldPrintDef(*Node.second)) {
-      continue;
-    }
+  const auto Nodes = getRecordsForCategory(options::Category);
+  for (const auto *Node : Nodes) {
     printAutogenReminder(OS);
-    OS << "#pragma mark - " << Node.second->getName() << " API\n\n";
-    printSyntaxImplementation(*Node.second, OS);
-    OS << "#pragma mark - " << Node.second->getName() << " Data\n\n";
-    printSyntaxDataImplementation(*Node.second, OS);
+    OS << "#pragma mark - " << Node->getName() << " API\n\n";
+    printSyntaxImplementation(*Node, OS);
+    OS << "#pragma mark - " << Node->getName() << " Data\n\n";
+    printSyntaxDataImplementation(*Node, OS);
   }
 
   return false;
